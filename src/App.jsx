@@ -1,25 +1,33 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabaseClient'
+import { DEFAULT_CONFIG, intervalsOverlap } from './lib/timeSlots'
 import AuthScreen from './components/AuthScreen'
 import GroupsScreen from './components/GroupsScreen'
 import ScheduleGrid from './components/ScheduleGrid'
 import GroupHeatmap from './components/GroupHeatmap'
 import MemberList from './components/MemberList'
+import GroupSettings from './components/GroupSettings'
 
 const SESSION_KEY = 'horario-app-user'
+const ACTIVE_GROUP_KEY = 'horario-app-active-group'
 
 export default function App() {
   const [user, setUser] = useState(null)
   const [activeGroup, setActiveGroup] = useState(null)
-  const [mySchedule, setMySchedule] = useState({})
+  const [groupConfig, setGroupConfig] = useState(DEFAULT_CONFIG)
+  const [mySchedule, setMySchedule] = useState([])
   const [members, setMembers] = useState([])
   const [view, setView] = useState('mine')
   const [saving, setSaving] = useState(false)
   const [selectedMember, setSelectedMember] = useState(null)
+  const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => {
-    const saved = localStorage.getItem(SESSION_KEY)
-    if (saved) setUser(JSON.parse(saved))
+    const savedUser = localStorage.getItem(SESSION_KEY)
+    if (savedUser) setUser(JSON.parse(savedUser))
+
+    const savedGroup = localStorage.getItem(ACTIVE_GROUP_KEY)
+    if (savedGroup) setActiveGroup(savedGroup)
   }, [])
 
   function handleAuthed(newUser) {
@@ -27,18 +35,66 @@ export default function App() {
     setUser(newUser)
   }
 
+  function handleUsernameChanged(newUsername) {
+    const updated = { ...user, username: newUsername }
+    localStorage.setItem(SESSION_KEY, JSON.stringify(updated))
+    setUser(updated)
+  }
+
   function handleSignOut() {
     localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(ACTIVE_GROUP_KEY)
     setUser(null)
     setActiveGroup(null)
+    setMySchedule([])
+    setMembers([])
+    setSelectedMember(null)
+  }
+
+  function handleEnterGroup(code) {
+    localStorage.setItem(ACTIVE_GROUP_KEY, code)
+    setActiveGroup(code)
+  }
+
+  function handleBackToGroups() {
+    localStorage.removeItem(ACTIVE_GROUP_KEY)
+    setActiveGroup(null)
+    setMySchedule([])
+    setMembers([])
+    setSelectedMember(null)
+    setShowSettings(false)
   }
 
   useEffect(() => {
     if (!activeGroup || !user) return
+    loadGroupConfig()
     loadMySchedule()
     loadGroupMembers()
     setSelectedMember(null)
-  }, [activeGroup])
+  }, [activeGroup, user?.id])
+
+  async function loadGroupConfig() {
+    const { data, error } = await supabase
+      .from('group_settings')
+      .select('config')
+      .eq('group_code', activeGroup)
+      .maybeSingle()
+
+    if (error) {
+      console.error(error)
+      return
+    }
+    setGroupConfig(data?.config ?? DEFAULT_CONFIG)
+  }
+
+  async function saveGroupConfig(newConfig) {
+    setGroupConfig(newConfig)
+    setShowSettings(false)
+    const { error } = await supabase
+      .from('group_settings')
+      .upsert({ group_code: activeGroup, config: newConfig }, { onConflict: 'group_code' })
+    if (error) console.error(error)
+  }
 
   async function loadMySchedule() {
     const { data, error } = await supabase
@@ -52,7 +108,7 @@ export default function App() {
       console.error(error)
       return
     }
-    setMySchedule(data?.busy_slots ?? {})
+    setMySchedule(data?.busy_slots ?? [])
   }
 
   async function loadGroupMembers() {
@@ -79,14 +135,14 @@ export default function App() {
 
     const usernames = Object.fromEntries((profileRows ?? []).map((p) => [p.id, p.username]))
     const scheduleByUser = Object.fromEntries(
-      (scheduleRows ?? []).map((s) => [s.user_id, s.busy_slots ?? {}])
+      (scheduleRows ?? []).map((s) => [s.user_id, s.busy_slots ?? []])
     )
 
     setMembers(
       userIds.map((id) => ({
         userId: id,
         name: usernames[id] ?? '(desconocido)',
-        schedule: scheduleByUser[id] ?? {},
+        schedule: scheduleByUser[id] ?? [],
       }))
     )
   }
@@ -102,15 +158,19 @@ export default function App() {
     if (error) console.error(error)
   }
 
-  function toggleSlot(id) {
-    const next = { ...mySchedule }
-    if (next[id]) delete next[id]
-    else next[id] = true
+  function toggleSlot(day, start, end) {
+    const overlapping = mySchedule.filter(
+      (iv) => iv.day === day && intervalsOverlap(iv.start, iv.end, start, end)
+    )
+    const next =
+      overlapping.length > 0
+        ? mySchedule.filter((iv) => !(iv.day === day && intervalsOverlap(iv.start, iv.end, start, end)))
+        : [...mySchedule, { day, start, end }]
     saveMySchedule(next)
   }
 
   function clearMySchedule() {
-    saveMySchedule({})
+    saveMySchedule([])
   }
 
   if (!user) return <AuthScreen onAuthed={handleAuthed} />
@@ -119,8 +179,10 @@ export default function App() {
     return (
       <GroupsScreen
         userId={user.id}
-        onEnterGroup={(code) => setActiveGroup(code)}
+        username={user.username}
+        onEnterGroup={handleEnterGroup}
         onSignOut={handleSignOut}
+        onUsernameChanged={handleUsernameChanged}
       />
     )
   }
@@ -134,38 +196,62 @@ export default function App() {
           </p>
           <h1 className="text-2xl font-semibold">Hola, {user.username}</h1>
         </div>
-        <button
-          onClick={() => setActiveGroup(null)}
-          className="text-sm text-board-cream/50 hover:text-board-cream"
-        >
-          Mis grupos
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowSettings((s) => !s)}
+            className="text-sm text-board-cream/50 hover:text-board-cream"
+          >
+            {showSettings ? 'Volver' : 'Configurar horario'}
+          </button>
+          <button
+            onClick={handleBackToGroups}
+            className="text-sm text-board-cream/50 hover:text-board-cream"
+          >
+            Mis grupos
+          </button>
+        </div>
       </header>
 
-      <div className="flex gap-2 mb-6">
-        <TabButton active={view === 'mine'} onClick={() => setView('mine')}>
-          Mi horario
-        </TabButton>
-        <TabButton active={view === 'group'} onClick={() => setView('group')}>
-          Disponibilidad del grupo ({members.length})
-        </TabButton>
-      </div>
-
-      {view === 'mine' ? (
-        <>
-          <ScheduleGrid mySchedule={mySchedule} onToggle={toggleSlot} onClearAll={clearMySchedule} />
-          <p className="text-xs text-board-cream/40 mt-2 h-4">{saving ? 'Guardando…' : ''}</p>
-        </>
+      {showSettings ? (
+        <GroupSettings
+          config={groupConfig}
+          onSave={saveGroupConfig}
+          onCancel={() => setShowSettings(false)}
+        />
       ) : (
         <>
-          <MemberList members={members} selected={selectedMember} onSelect={setSelectedMember} />
-          {selectedMember ? (
-            <ScheduleGrid
-              mySchedule={members.find((m) => m.name === selectedMember)?.schedule ?? {}}
-              readOnly
-            />
+          <div className="flex gap-2 mb-6">
+            <TabButton active={view === 'mine'} onClick={() => setView('mine')}>
+              Mi horario
+            </TabButton>
+            <TabButton active={view === 'group'} onClick={() => setView('group')}>
+              Disponibilidad del grupo ({members.length})
+            </TabButton>
+          </div>
+
+          {view === 'mine' ? (
+            <>
+              <ScheduleGrid
+                config={groupConfig}
+                mySchedule={mySchedule}
+                onToggle={toggleSlot}
+                onClearAll={clearMySchedule}
+              />
+              <p className="text-xs text-board-cream/40 mt-2 h-4">{saving ? 'Guardando…' : ''}</p>
+            </>
           ) : (
-            <GroupHeatmap members={members} />
+            <>
+              <MemberList members={members} selected={selectedMember} onSelect={setSelectedMember} />
+              {selectedMember ? (
+                <ScheduleGrid
+                  config={groupConfig}
+                  mySchedule={members.find((m) => m.name === selectedMember)?.schedule ?? []}
+                  readOnly
+                />
+              ) : (
+                <GroupHeatmap config={groupConfig} members={members} myUserId={user.id} />
+              )}
+            </>
           )}
         </>
       )}

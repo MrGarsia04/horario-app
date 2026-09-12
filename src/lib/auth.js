@@ -60,3 +60,22 @@ export async function signIn(username, password) {
 
   return { data: { id: data.id, username: data.username } }
 }
+
+export async function updateUsername(userId, newUsername) {
+  const trimmed = newUsername.trim()
+  if (!trimmed) return { error: 'El nombre de usuario no puede estar vacío.' }
+
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('username', trimmed)
+    .maybeSingle()
+
+  if (existing && existing.id !== userId) {
+    return { error: 'Ese nombre de usuario ya está en uso.' }
+  }
+
+  const { error } = await supabase.from('profiles').update({ username: trimmed }).eq('id', userId)
+  if (error) return { error: error.message }
+  return { data: { username: trimmed } }
+}

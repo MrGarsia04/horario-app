@@ -1,9 +1,9 @@
-import { DAYS, ROWS, slotId } from '../lib/timeSlots'
+import { getDaysForConfig, buildRows, isBusyAt } from '../lib/timeSlots'
 
-// mySchedule: objeto { [slotId]: true } con las franjas de clase marcadas como ocupado.
-// readOnly: si es true, las casillas se muestran pero no se pueden tocar (para ver el
-// horario de otra persona del grupo). onClearAll: opcional, muestra el botón de vaciar.
-export default function ScheduleGrid({ mySchedule, onToggle, readOnly = false, onClearAll }) {
+export default function ScheduleGrid({ config, mySchedule, onToggle, readOnly = false, onClearAll }) {
+  const days = getDaysForConfig(config)
+  const rows = buildRows(config)
+
   function handleClear() {
     const ok = window.confirm('¿Vaciar todo tu horario? Se desmarcarán todas las casillas.')
     if (ok) onClearAll()
@@ -14,10 +14,10 @@ export default function ScheduleGrid({ mySchedule, onToggle, readOnly = false, o
       <div className="min-w-[560px]">
         <div
           className="grid gap-px bg-board-line"
-          style={{ gridTemplateColumns: `90px repeat(${DAYS.length}, 1fr)` }}
+          style={{ gridTemplateColumns: `90px repeat(${days.length}, 1fr)` }}
         >
           <div className="bg-board-bg" />
-          {DAYS.map((day) => (
+          {days.map((day) => (
             <div
               key={day.key}
               className="bg-board-bg text-center font-mono text-xs tracking-wide text-board-cream/70 py-2"
@@ -26,18 +26,17 @@ export default function ScheduleGrid({ mySchedule, onToggle, readOnly = false, o
             </div>
           ))}
 
-          {ROWS.map((row) =>
+          {rows.map((row) =>
             row.type === 'break' ? (
-              <BreakRow key={row.start} row={row} totalDays={DAYS.length} />
+              <BreakRow key={row.start} row={row} totalDays={days.length} />
             ) : (
               <RowLabel key={row.start} row={row}>
-                {DAYS.map((day) => {
-                  const id = slotId(day.key, row.start)
-                  const busy = Boolean(mySchedule[id])
+                {days.map((day) => {
+                  const busy = isBusyAt(mySchedule, day.key, row.start, row.end)
                   return (
                     <button
-                      key={id}
-                      onClick={readOnly ? undefined : () => onToggle(id)}
+                      key={day.key + row.start}
+                      onClick={readOnly ? undefined : () => onToggle(day.key, row.start, row.end)}
                       disabled={readOnly}
                       className={`h-10 border-0 transition-colors ${
                         busy ? 'bg-board-teal' : 'bg-board-panel'
@@ -59,7 +58,7 @@ export default function ScheduleGrid({ mySchedule, onToggle, readOnly = false, o
           <span className="inline-flex items-center gap-1">
             <span className="w-3 h-3 inline-block bg-board-panel border border-board-line" /> libre
           </span>
-          {!readOnly && <span>Cada casilla es una clase de 1h30. Haz clic para marcarla</span>}
+          {!readOnly && <span>Haz clic en una casilla para marcarla</span>}
         </div>
         {!readOnly && onClearAll && (
           <button onClick={handleClear} className="text-xs text-board-cream/40 hover:text-red-400">
@@ -92,7 +91,7 @@ function BreakRow({ row, totalDays }) {
         className="h-8 bg-board-amber/10 border-y border-dashed border-board-amber/40 flex items-center justify-center text-[11px] font-mono text-board-amber/80"
         style={{ gridColumn: `span ${totalDays}` }}
       >
-        Comida
+        descanso · libre para todos
       </div>
     </>
   )
