@@ -1,17 +1,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { updateUsername } from '../lib/auth'
 
-export default function GroupsScreen({ userId, username, onEnterGroup, onSignOut, onUsernameChanged }) {
+export default function GroupsScreen({ userId, username, onEnterGroup, onSignOut, onOpenProfile, onOpenEvents }) {
   const [groups, setGroups] = useState([])
   const [newCode, setNewCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-
-  const [editingName, setEditingName] = useState(false)
-  const [nameInput, setNameInput] = useState(username)
-  const [nameError, setNameError] = useState('')
-  const [savingName, setSavingName] = useState(false)
 
   useEffect(() => {
     loadGroups()
@@ -56,65 +50,24 @@ export default function GroupsScreen({ userId, username, onEnterGroup, onSignOut
     loadGroups()
   }
 
-  async function handleSaveName(e) {
-    e.preventDefault()
-    setNameError('')
-    setSavingName(true)
-    const result = await updateUsername(userId, nameInput)
-    setSavingName(false)
-
-    if (result.error) {
-      setNameError(result.error)
-      return
-    }
-    setEditingName(false)
-    onUsernameChanged(result.data.username)
-  }
-
   return (
     <div className="min-h-screen max-w-md mx-auto px-4 py-10">
-      <div className="flex items-center justify-between mb-2">
-        {editingName ? (
-          <form onSubmit={handleSaveName} className="flex items-center gap-2 flex-1">
-            <input
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-              className="bg-board-bg border border-board-line rounded px-2 py-1 text-lg font-semibold outline-none focus:border-board-amber"
-              autoFocus
-            />
-            <button type="submit" disabled={savingName} className="text-sm text-board-amber hover:brightness-110">
-              Guardar
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setEditingName(false)
-                setNameInput(username)
-                setNameError('')
-              }}
-              className="text-sm text-board-cream/40 hover:text-board-cream/70"
-            >
-              Cancelar
-            </button>
-          </form>
-        ) : (
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            {username}
-            <button
-              onClick={() => setEditingName(true)}
-              className="text-xs text-board-cream/40 hover:text-board-amber font-normal"
-            >
-              editar nombre
-            </button>
-          </h1>
-        )}
-        <button onClick={onSignOut} className="text-sm text-board-cream/50 hover:text-board-cream ml-3">
-          Cerrar sesión
-        </button>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-2xl font-semibold">{username}</h1>
+        <div className="flex items-center gap-4">
+          <button onClick={onOpenProfile} className="text-sm text-board-cream/50 hover:text-board-cream">
+            Perfil
+          </button>
+          <button onClick={onOpenEvents} className="text-sm text-board-cream/50 hover:text-board-cream">
+            Planes
+          </button>
+          <button onClick={onSignOut} className="text-sm text-board-cream/50 hover:text-board-cream">
+            Cerrar sesión
+          </button>
+        </div>
       </div>
-      {nameError && <p className="text-sm text-red-400 mb-4">{nameError}</p>}
 
-      <p className="text-sm text-board-cream/50 mb-6 mt-6">Tus grupos</p>
+      <p className="text-sm text-board-cream/50 mb-6">Tus grupos</p>
 
       {loading ? (
         <p className="text-sm text-board-cream/50">Cargando…</p>

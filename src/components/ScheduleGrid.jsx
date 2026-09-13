@@ -1,6 +1,6 @@
 import { getDaysForConfig, buildRows, isBusyAt } from '../lib/timeSlots'
 
-export default function ScheduleGrid({ config, mySchedule, onToggle, readOnly = false, onClearAll }) {
+export default function ScheduleGrid({ config, mySchedule, onToggle, readOnly = false, onClearAll, highlightDayKey }) {
   const days = getDaysForConfig(config)
   const rows = buildRows(config)
 
@@ -17,12 +17,13 @@ export default function ScheduleGrid({ config, mySchedule, onToggle, readOnly = 
           style={{ gridTemplateColumns: `90px repeat(${days.length}, 1fr)` }}
         >
           <div className="bg-board-bg" />
-          {days.map((day) => (
+            {days.map((day) => (
             <div
               key={day.key}
               className="bg-board-bg text-center font-mono text-xs tracking-wide text-board-cream/70 py-2"
             >
               {day.label}
+              {day.key === highlightDayKey && <span className="ml-1">🎂</span>}
             </div>
           ))}
 

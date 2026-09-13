@@ -7,6 +7,12 @@ import ScheduleGrid from './components/ScheduleGrid'
 import GroupHeatmap from './components/GroupHeatmap'
 import MemberList from './components/MemberList'
 import GroupSettings from './components/GroupSettings'
+import WeekNavigator from './components/WeekNavigator'
+import ProfileScreen from './components/ProfileScreen'
+import GroupMembersList from './components/GroupMembersList'
+import EventsScreen from './components/EventsScreen'
+import { getWeekStart, resolveScheduleForWeek, getDateForDay } from './lib/weeks'
+import { ALL_DAYS } from './lib/timeSlots'
 
 const SESSION_KEY = 'horario-app-user'
 const ACTIVE_GROUP_KEY = 'horario-app-active-group'
@@ -15,12 +21,21 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [activeGroup, setActiveGroup] = useState(null)
   const [groupConfig, setGroupConfig] = useState(DEFAULT_CONFIG)
-  const [mySchedule, setMySchedule] = useState([])
+
+  const [selectedWeek, setSelectedWeek] = useState(getWeekStart(new Date()))
+  const [myBaseSchedule, setMyBaseSchedule] = useState([])
+  const [myOverrides, setMyOverrides] = useState([])
+
   const [members, setMembers] = useState([])
+  const [overridesByUser, setOverridesByUser] = useState({})
+
   const [view, setView] = useState('mine')
   const [saving, setSaving] = useState(false)
   const [selectedMember, setSelectedMember] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
+  const [showEvents, setShowEvents] = useState(false)
+  const [myBirthday, setMyBirthday] = useState(null)
 
   useEffect(() => {
     const savedUser = localStorage.getItem(SESSION_KEY)
@@ -46,9 +61,7 @@ export default function App() {
     localStorage.removeItem(ACTIVE_GROUP_KEY)
     setUser(null)
     setActiveGroup(null)
-    setMySchedule([])
-    setMembers([])
-    setSelectedMember(null)
+    resetGroupState()
   }
 
   function handleEnterGroup(code) {
@@ -56,19 +69,35 @@ export default function App() {
     setActiveGroup(code)
   }
 
-  function handleBackToGroups() {
-    localStorage.removeItem(ACTIVE_GROUP_KEY)
-    setActiveGroup(null)
-    setMySchedule([])
+  function resetGroupState() {
+    setMyBaseSchedule([])
+    setMyOverrides([])
     setMembers([])
+    setOverridesByUser({})
     setSelectedMember(null)
     setShowSettings(false)
   }
 
+  function handleBackToGroups() {
+    localStorage.removeItem(ACTIVE_GROUP_KEY)
+    setActiveGroup(null)
+    resetGroupState()
+  }
+
+  useEffect(() => {
+  if (!user) return
+  supabase
+    .from('profiles')
+    .select('birthday')
+    .eq('id', user.id)
+    .maybeSingle()
+    .then(({ data }) => setMyBirthday(data?.birthday ?? null))
+}, [user?.id, showProfile])
+
   useEffect(() => {
     if (!activeGroup || !user) return
     loadGroupConfig()
-    loadMySchedule()
+    loadMyData()
     loadGroupMembers()
     setSelectedMember(null)
   }, [activeGroup, user?.id])
@@ -96,19 +125,26 @@ export default function App() {
     if (error) console.error(error)
   }
 
-  async function loadMySchedule() {
-    const { data, error } = await supabase
-      .from('schedules')
-      .select('busy_slots')
-      .eq('group_code', activeGroup)
-      .eq('user_id', user.id)
-      .maybeSingle()
+  async function loadMyData() {
+    const [{ data: baseRow, error: baseErr }, { data: overrideRows, error: ovErr }] = await Promise.all([
+      supabase
+        .from('schedules')
+        .select('busy_slots')
+        .eq('group_code', activeGroup)
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      supabase
+        .from('schedule_overrides')
+        .select('week_start, busy_slots')
+        .eq('group_code', activeGroup)
+        .eq('user_id', user.id),
+    ])
 
-    if (error) {
-      console.error(error)
-      return
-    }
-    setMySchedule(data?.busy_slots ?? [])
+    if (baseErr) console.error(baseErr)
+    if (ovErr) console.error(ovErr)
+
+    setMyBaseSchedule(baseRow?.busy_slots ?? [])
+    setMyOverrides(overrideRows ?? [])
   }
 
   async function loadGroupMembers() {
@@ -125,37 +161,78 @@ export default function App() {
     const userIds = memberships.map((m) => m.user_id)
     if (userIds.length === 0) {
       setMembers([])
+      setOverridesByUser({})
       return
     }
 
-    const [{ data: profileRows }, { data: scheduleRows }] = await Promise.all([
+    const [{ data: profileRows }, { data: scheduleRows }, { data: overrideRows }] = await Promise.all([
       supabase.from('profiles').select('id, username').in('id', userIds),
       supabase.from('schedules').select('user_id, busy_slots').eq('group_code', activeGroup),
+      supabase
+        .from('schedule_overrides')
+        .select('user_id, week_start, busy_slots')
+        .eq('group_code', activeGroup)
+        .in('user_id', userIds),
     ])
 
     const usernames = Object.fromEntries((profileRows ?? []).map((p) => [p.id, p.username]))
-    const scheduleByUser = Object.fromEntries(
+    const baseByUser = Object.fromEntries(
       (scheduleRows ?? []).map((s) => [s.user_id, s.busy_slots ?? []])
     )
+
+    const grouped = {}
+    for (const row of overrideRows ?? []) {
+      if (!grouped[row.user_id]) grouped[row.user_id] = []
+      grouped[row.user_id].push({ week_start: row.week_start, busy_slots: row.busy_slots })
+    }
+    setOverridesByUser(grouped)
 
     setMembers(
       userIds.map((id) => ({
         userId: id,
         name: usernames[id] ?? '(desconocido)',
-        schedule: scheduleByUser[id] ?? [],
+        baseSchedule: baseByUser[id] ?? [],
       }))
     )
   }
 
-  async function saveMySchedule(next) {
-    setMySchedule(next)
+  const { schedule: mySchedule, isCustomThisWeek } = resolveScheduleForWeek(
+    myBaseSchedule,
+    myOverrides,
+    selectedWeek
+  )
+
+  const resolvedMembers = members.map((m) => ({
+    userId: m.userId,
+    name: m.name,
+    schedule: resolveScheduleForWeek(m.baseSchedule, overridesByUser[m.userId] ?? [], selectedWeek)
+      .schedule,
+  }))
+
+  function birthdayDayKeyForWeek(weekStart, birthday) {
+  if (!birthday) return null
+  const monthDay = birthday.slice(5)
+  const match = ALL_DAYS.find((d) => getDateForDay(weekStart, d.key).slice(5) === monthDay)
+  return match?.key ?? null
+}
+
+const myBirthdayDayKey = birthdayDayKeyForWeek(selectedWeek, myBirthday)
+
+  async function saveOverrideForSelectedWeek(next) {
     setSaving(true)
-    const { error } = await supabase.from('schedules').upsert(
-      { group_code: activeGroup, user_id: user.id, busy_slots: next },
-      { onConflict: 'group_code,user_id' }
+    const { error } = await supabase.from('schedule_overrides').upsert(
+      { group_code: activeGroup, user_id: user.id, week_start: selectedWeek, busy_slots: next },
+      { onConflict: 'group_code,user_id,week_start' }
     )
     setSaving(false)
-    if (error) console.error(error)
+    if (error) {
+      console.error(error)
+      return
+    }
+    setMyOverrides((prev) => {
+      const others = prev.filter((o) => o.week_start !== selectedWeek)
+      return [...others, { week_start: selectedWeek, busy_slots: next }]
+    })
   }
 
   function toggleSlot(day, start, end) {
@@ -166,14 +243,29 @@ export default function App() {
       overlapping.length > 0
         ? mySchedule.filter((iv) => !(iv.day === day && intervalsOverlap(iv.start, iv.end, start, end)))
         : [...mySchedule, { day, start, end }]
-    saveMySchedule(next)
+    saveOverrideForSelectedWeek(next)
   }
 
   function clearMySchedule() {
-    saveMySchedule([])
+    saveOverrideForSelectedWeek([])
   }
 
   if (!user) return <AuthScreen onAuthed={handleAuthed} />
+
+  if (showProfile) {
+    return (
+      <ProfileScreen
+        userId={user.id}
+        username={user.username}
+        onUsernameChanged={handleUsernameChanged}
+        onBack={() => setShowProfile(false)}
+      />
+    )
+  }
+
+  if (showEvents) {
+    return <EventsScreen userId={user.id} onBack={() => setShowEvents(false)} />
+  }
 
   if (!activeGroup) {
     return (
@@ -182,10 +274,13 @@ export default function App() {
         username={user.username}
         onEnterGroup={handleEnterGroup}
         onSignOut={handleSignOut}
-        onUsernameChanged={handleUsernameChanged}
+        onOpenProfile={() => setShowProfile(true)}
+        onOpenEvents={() => setShowEvents(true)}
       />
     )
   }
+
+  const weekStatusText = isCustomThisWeek ? 'Personalizada desde esta semana' : 'Horario habitual'
 
   return (
     <div className="min-h-screen max-w-3xl mx-auto px-4 py-8">
@@ -198,9 +293,15 @@ export default function App() {
         </div>
         <div className="flex items-center gap-4">
           <button
-            onClick={() => setShowSettings((s) => !s)}
+            onClick={() => setShowProfile(true)}
             className="text-sm text-board-cream/50 hover:text-board-cream"
           >
+            Perfil
+          </button>
+          <button onClick={() => setShowEvents(true)} className="text-sm text-board-cream/50 hover:text-board-cream">
+            Planes
+          </button>
+          <button onClick={() => setShowSettings((s) => !s)} className="text-sm text-board-cream/50 hover:text-board-cream">
             {showSettings ? 'Volver' : 'Configurar horario'}
           </button>
           <button
@@ -220,14 +321,25 @@ export default function App() {
         />
       ) : (
         <>
-          <div className="flex gap-2 mb-6">
+          <div className="flex gap-2 mb-4">
             <TabButton active={view === 'mine'} onClick={() => setView('mine')}>
               Mi horario
             </TabButton>
             <TabButton active={view === 'group'} onClick={() => setView('group')}>
               Disponibilidad del grupo ({members.length})
             </TabButton>
+            <TabButton active={view === 'members'} onClick={() => setView('members')}>
+              Miembros
+            </TabButton>
           </div>
+
+          {view !== 'members' && (
+            <WeekNavigator
+              weekStart={selectedWeek}
+              onChange={setSelectedWeek}
+              statusText={view === 'mine' ? weekStatusText : null}
+            />
+          )}
 
           {view === 'mine' ? (
             <>
@@ -236,22 +348,29 @@ export default function App() {
                 mySchedule={mySchedule}
                 onToggle={toggleSlot}
                 onClearAll={clearMySchedule}
+                highlightDayKey={myBirthdayDayKey}
               />
               <p className="text-xs text-board-cream/40 mt-2 h-4">{saving ? 'Guardando…' : ''}</p>
             </>
-          ) : (
+          ) : view === 'group' ? (
             <>
-              <MemberList members={members} selected={selectedMember} onSelect={setSelectedMember} />
+              <MemberList
+                members={resolvedMembers}
+                selected={selectedMember}
+                onSelect={setSelectedMember}
+              />
               {selectedMember ? (
                 <ScheduleGrid
                   config={groupConfig}
-                  mySchedule={members.find((m) => m.name === selectedMember)?.schedule ?? []}
+                  mySchedule={resolvedMembers.find((m) => m.name === selectedMember)?.schedule ?? []}
                   readOnly
                 />
               ) : (
-                <GroupHeatmap config={groupConfig} members={members} myUserId={user.id} />
+                <GroupHeatmap config={groupConfig} members={resolvedMembers} myUserId={user.id} />
               )}
             </>
+          ) : (
+            <GroupMembersList members={members} myUserId={user.id} />
           )}
         </>
       )}

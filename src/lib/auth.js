@@ -79,3 +79,31 @@ export async function updateUsername(userId, newUsername) {
   if (error) return { error: error.message }
   return { data: { username: trimmed } }
 }
+
+export async function changePassword(userId, currentPassword, newPassword) {
+  if (newPassword.length < 4) {
+    return { error: 'La contraseña nueva debe tener al menos 4 caracteres.' }
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('password_hash')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (error || !data) return { error: 'No se pudo verificar tu cuenta.' }
+
+  const currentHash = await hashPassword(currentPassword)
+  if (currentHash !== data.password_hash) {
+    return { error: 'La contraseña actual no es correcta.' }
+  }
+
+  const newHash = await hashPassword(newPassword)
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({ password_hash: newHash })
+    .eq('id', userId)
+
+  if (updateError) return { error: updateError.message }
+  return { data: true }
+}
