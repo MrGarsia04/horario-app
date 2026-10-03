@@ -1,0 +1,228 @@
+/* =====================================================================
+   TEMA "ROSA" — se activa con <html data-theme="rosa"> (ver src/lib/theme.js)
+
+   Idea general: los componentes usan los mismos nombres de color de siempre
+   (board-bg, board-panel, board-amber…), y aquí esos nombres pasan a
+   significar otra cosa. Además de la paleta, este archivo cambia las formas
+   (esquinas más redondas), la tipografía, las sombras, la rejilla y añade
+   los detalles (flores, lacitos, fondo).
+
+   Paleta: rosa + menta, con texto ciruela (nunca gris ni negro puro).
+   Todas las combinaciones de texto/fondo cumplen contraste AA (≥ 4.5:1).
+
+   NOTA SOBRE ESPECIFICIDAD: este archivo se importa DESPUÉS de Tailwind.
+   Cuando se sobrescribe una utilidad existente (p. ej. text-board-cream/50)
+   se usa :where(...) para no subir su especificidad; así los estados como
+   hover: de esa misma utilidad siguen ganando. Las reglas nuevas (clases
+   propias como .grid-board) usan el selector normal.
+
+   PARA CREAR OTRO TEMA: copia el bloque de variables de abajo, cambia el
+   nombre en data-theme y regístralo en src/lib/theme.js.
+   ===================================================================== */
+
+/* Los adornos (lacitos…) solo se ven en el tema rosa */
+.only-rosa {
+  display: none;
+}
+
+:root[data-theme='rosa'] {
+  color-scheme: light;
+  accent-color: rgb(var(--board-amber)); /* casillas de verificación */
+  scrollbar-color: rgb(247 160 195) transparent;
+  scrollbar-width: thin;
+
+  --board-bg: 255 240 245; /* #FFF0F5 rosa muy pálido */
+  --board-panel: 255 251 253; /* #FFFBFD casi blanco, con un toque rosa */
+  --board-line: 247 203 221; /* #F7CBDD bordes rosa suave */
+  --board-cream: 91 43 66; /* #5B2B42 ciruela: el color del texto */
+  --board-amber: 196 48 104; /* #C43068 frambuesa: acento principal */
+  --board-teal: 35 122 102; /* #237A66 menta oscuro: acento secundario */
+  --board-onaccent: 255 255 255;
+  --board-danger: 200 40 30; /* #C8281E rojo tomate (distinto del rosa) */
+
+  --mint-fill: 166 227 203; /* #A6E3CB menta pastel: casillas ocupadas */
+
+  /* Mapa de calor: de blanco a frambuesa (más intenso = más gente libre) */
+  --heat-0: 255 251 253;
+  --heat-1: 255 214 229;
+  --heat-2: 255 170 203;
+  --heat-3: 242 123 168;
+  --heat-4: 222 79 134;
+
+  --font-sans: 'Nunito', 'Inter', sans-serif;
+  --font-mono: 'Nunito', 'Inter', sans-serif;
+  --font-display: 'Fredoka', 'Nunito', sans-serif;
+
+  --radius-sm: 0.8rem; /* botones, inputs, filas */
+  --radius-md: 1.25rem; /* tarjetas */
+}
+
+/* ---------- Página ---------- */
+
+/* Dos "luces" rosas en las esquinas + patrón de florecitas muy tenue.
+   Va en el body porque su fondo se propaga al lienzo de la página. */
+[data-theme='rosa'] body {
+  background-image:
+    radial-gradient(48rem 36rem at 0% 0%, rgb(255 222 235 / 0.85), transparent 65%),
+    radial-gradient(44rem 34rem at 100% 100%, rgb(255 226 238 / 0.9), transparent 65%),
+    url('./assets/rosa/pattern.svg');
+  background-attachment: fixed;
+  background-repeat: no-repeat, no-repeat, repeat; /* solo el patrón se repite */
+}
+
+[data-theme='rosa'] ::selection {
+  background: rgb(var(--board-amber) / 0.22);
+}
+
+/* ---------- Tipografía ---------- */
+
+/* Pequeña flor tras cada título principal */
+[data-theme='rosa'] h1::after {
+  content: '';
+  display: inline-block;
+  width: 0.62em;
+  height: 0.62em;
+  margin-left: 0.4em;
+  vertical-align: 0.06em;
+  background: url('./assets/rosa/flower.svg') center / contain no-repeat;
+}
+
+/* Las etiquetas "técnicas" (días, horas, grupo) pasan de monoespaciada a Nunito */
+[data-theme='rosa'] .font-mono {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Los textos atenuados (text-board-cream/40, /50…) son demasiado pálidos
+   sobre fondo claro: se compensa con más opacidad en este tema. */
+:where([data-theme='rosa']) .text-board-cream\/80 {
+  color: rgb(var(--board-cream) / 0.92);
+}
+:where([data-theme='rosa']) .text-board-cream\/70 {
+  color: rgb(var(--board-cream) / 0.86);
+}
+:where([data-theme='rosa']) .text-board-cream\/60 {
+  color: rgb(var(--board-cream) / 0.8);
+}
+:where([data-theme='rosa']) .text-board-cream\/50 {
+  color: rgb(var(--board-cream) / 0.76);
+}
+:where([data-theme='rosa']) .text-board-cream\/40 {
+  color: rgb(var(--board-cream) / 0.72);
+}
+
+[data-theme='rosa'] ::placeholder {
+  color: rgb(var(--board-cream) / 0.6);
+  opacity: 1;
+}
+
+/* ---------- Superficies ---------- */
+
+/* Tarjetas y filas de lista: sombra rosa suave */
+[data-theme='rosa'] .bg-board-panel.border-board-line:not(.legend-swatch) {
+  box-shadow: 0 6px 18px -10px rgb(196 48 104 / 0.38);
+}
+
+/* Pestañas y "pills" inactivas: un fino contorno para que no se pierdan
+   (blanco sobre rosa pálido casi no se distingue). Es un box-shadow inset
+   para que no cambie el tamaño respecto a las activas. */
+[data-theme='rosa'] .bg-board-panel.text-board-cream\/70 {
+  box-shadow: inset 0 0 0 1px rgb(var(--board-line));
+}
+
+/* ---------- Controles ---------- */
+
+/* Botones de acento (y pestañas/pills activas): efecto "caramelo" */
+[data-theme='rosa'] .bg-board-amber {
+  box-shadow:
+    0 6px 14px -6px rgb(196 48 104 / 0.6),
+    inset 0 1px 0 rgb(255 255 255 / 0.28);
+}
+
+[data-theme='rosa'] :is(input, textarea, select):focus {
+  box-shadow: 0 0 0 3px rgb(var(--board-amber) / 0.18);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-theme='rosa'] button:not(:disabled):active {
+    transform: scale(0.97);
+  }
+}
+
+/* ---------- Rejilla del horario y mapa de calor ---------- */
+
+/* En vez de una cuadrícula de 1px, "azulejos" blancos sobre un marco rosa */
+[data-theme='rosa'] .grid-board {
+  gap: 4px;
+  padding: 8px;
+  background: rgb(251 222 233); /* --board-line al 50% sobre el fondo, pero opaco */
+  border-radius: var(--radius-md);
+}
+
+/* Cabeceras de día y horas: sin fondo propio, se ven sobre el marco */
+[data-theme='rosa'] .grid-board > .bg-board-bg {
+  background: transparent;
+}
+
+/* La esquina vacía de la rejilla lleva un lacito */
+[data-theme='rosa'] .grid-board > .grid-corner {
+  background: url('./assets/rosa/bow.svg') center / 30px auto no-repeat;
+}
+
+[data-theme='rosa'] .grid-cell {
+  border-radius: 0.65rem;
+}
+
+[data-theme='rosa'] .grid-cell:not(:disabled):hover {
+  outline: 2px solid rgb(var(--board-amber) / 0.55);
+  outline-offset: -2px;
+}
+
+/* Casilla ocupada: menta pastel (el teal oscuro queda para textos y puntos) */
+:where([data-theme='rosa']) .cell-busy {
+  background-color: rgb(var(--mint-fill));
+}
+
+[data-theme='rosa'] .legend-swatch {
+  border-radius: 4px;
+}
+
+/* Punto de "libre para ti": un aro blanco para que se vea también sobre
+   las casillas más intensas del mapa de calor */
+[data-theme='rosa'] .heat-dot {
+  box-shadow: 0 0 0 2px #fff;
+}
+
+/* Fila de descanso: cinta punteada con florecitas a los lados */
+[data-theme='rosa'] .break-row {
+  gap: 0.5rem;
+  border-width: 1.5px; /* los 4 lados (el original solo tiene arriba y abajo) */
+  border-radius: 0.8rem;
+  color: rgb(160 30 85); /* frambuesa más profundo: texto pequeño sobre fondo rosa */
+}
+[data-theme='rosa'] .break-row::before,
+[data-theme='rosa'] .break-row::after {
+  content: '';
+  flex: none;
+  width: 13px;
+  height: 13px;
+  background: url('./assets/rosa/flower.svg') center / contain no-repeat;
+}
+
+/* ---------- Adornos ---------- */
+
+[data-theme='rosa'] .only-rosa {
+  display: block;
+}
+
+/* Lacito que "cuelga" del borde superior de la tarjeta de acceso */
+.auth-bow {
+  position: absolute;
+  left: 50%;
+  top: -36px;
+  width: 92px;
+  height: auto;
+  transform: translateX(-50%);
+  pointer-events: none;
+  filter: drop-shadow(0 4px 5px rgb(196 48 104 / 0.25));
+}

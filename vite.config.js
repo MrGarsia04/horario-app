@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png'],
       manifest: {
-        name: 'Panel de Horarios',
-        short_name: 'Horarios',
+        name: 'Coincidimos',
+        short_name: 'Coincidimos',
         description: 'Comparte tu horario con el grupo y ved cuándo coincidís libres.',
         theme_color: '#1B2430',
         background_color: '#1B2430',

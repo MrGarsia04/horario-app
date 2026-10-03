@@ -43,7 +43,7 @@ export default function JoinGroup({ onJoin }) {
 
         <button
           type="submit"
-          className="w-full bg-board-amber text-board-bg font-semibold py-2 rounded hover:brightness-110 transition"
+          className="w-full bg-board-amber text-board-onaccent font-semibold py-2 rounded hover:brightness-110 transition"
         >
           Entrar
         </button>

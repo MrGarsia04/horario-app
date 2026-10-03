@@ -168,13 +168,13 @@ export default function CreateEventForm({ userId, event, existingInviteeIds = []
         )}
       </div>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-board-danger">{error}</p>}
 
       <div className="flex gap-3">
         <button
           type="submit"
           disabled={saving}
-          className="flex-1 bg-board-amber text-board-bg font-semibold py-2 rounded hover:brightness-110 transition disabled:opacity-60"
+          className="flex-1 bg-board-amber text-board-onaccent font-semibold py-2 rounded hover:brightness-110 transition disabled:opacity-60"
         >
           {saving ? 'Guardando…' : isEditing ? 'Guardar cambios' : 'Crear plan'}
         </button>

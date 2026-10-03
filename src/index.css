@@ -2,9 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------ */
+/* Tema "panel" (oscuro) — es el de siempre y el que se usa por defecto.
+   El tema "rosa" redefine estas mismas variables en src/theme-rosa.css.
+   Los colores están como "R G B" (sin comas) para que Tailwind pueda
+   aplicarles transparencia (text-board-cream/50, etc.).               */
+/* ------------------------------------------------------------------ */
+:root {
+  --board-bg: 27 36 48; /* #1B2430 */
+  --board-panel: 19 25 32; /* #131920 */
+  --board-line: 42 52 68; /* #2A3444 */
+  --board-cream: 242 239 233; /* #F2EFE9 */
+  --board-amber: 232 163 61; /* #E8A33D */
+  --board-teal: 76 124 124; /* #4C7C7C */
+  --board-onaccent: 27 36 48; /* texto sobre botones de acento */
+  --board-danger: 248 113 113; /* #F87171 */
+
+  /* Mapa de calor del grupo: de "nadie libre" (0) a "todos libres" (4) */
+  --heat-0: 19 25 32;
+  --heat-1: 74 58 31;
+  --heat-2: 138 106 47;
+  --heat-3: 201 143 46;
+  --heat-4: 232 163 61;
+
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-display: 'Inter', sans-serif;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+}
+
 body {
-  font-family: 'Inter', sans-serif;
-  color: #f2efe9;
+  font-family: var(--font-sans);
+  color: rgb(var(--board-cream));
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
 }
 
 /* Efecto sutil de "parpadeo" al cambiar una casilla, como un panel de estación */

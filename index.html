@@ -12,9 +12,19 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <!-- Aplica el tema guardado ANTES de pintar, para que no haya un parpadeo oscuro
+         al abrir la app en modo rosa. (La lógica completa está en src/lib/theme.js) -->
+    <script>
+      try {
+        if (localStorage.getItem('horario-app-theme') === 'rosa') {
+          document.documentElement.setAttribute('data-theme', 'rosa')
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#FFF0F5')
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body class="bg-board-bg">
     <div id="root"></div>

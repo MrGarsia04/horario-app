@@ -66,7 +66,7 @@ export default function EventsScreen({ userId, onBack }) {
       ) : (
         <button
           onClick={() => setShowForm(true)}
-          className="w-full bg-board-amber text-board-bg font-semibold py-2 rounded hover:brightness-110 transition mb-6"
+          className="w-full bg-board-amber text-board-onaccent font-semibold py-2 rounded hover:brightness-110 transition mb-6"
         >
           + Nuevo plan
         </button>
@@ -95,7 +95,7 @@ export default function EventsScreen({ userId, onBack }) {
                         </button>
                         <button
                           onClick={() => handleDelete(e.id)}
-                          className="text-xs text-board-cream/40 hover:text-red-400"
+                          className="text-xs text-board-cream/40 hover:text-board-danger"
                         >
                           Eliminar
                         </button>
@@ -140,8 +140,8 @@ export default function EventsScreen({ userId, onBack }) {
                         onClick={() => handleRespond(e.id, 'declined')}
                         className={`text-sm ${
                           e.myStatus === 'declined'
-                            ? 'text-red-400'
-                            : 'text-board-cream/50 hover:text-red-400'
+                            ? 'text-board-danger'
+                            : 'text-board-cream/50 hover:text-board-danger'
                         }`}
                       >
                         No voy

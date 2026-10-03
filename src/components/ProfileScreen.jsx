@@ -3,6 +3,7 @@ import { updateUsername, changePassword } from '../lib/auth'
 import { updateProfileInfo, fetchPublicProfile } from '../lib/profile'
 import FriendsPanel from './FriendsPanel'
 import PublicProfile from './PublicProfile'
+import { ThemePicker } from './ThemeToggle'
 
 export default function ProfileScreen({ userId, username, onUsernameChanged, onBack }) {
   const [tab, setTab] = useState('cuenta')
@@ -101,7 +102,7 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
         <button
           onClick={() => setTab('cuenta')}
           className={`px-4 py-2 rounded text-sm font-medium ${
-            tab === 'cuenta' ? 'bg-board-amber text-board-bg' : 'bg-board-panel text-board-cream/70'
+            tab === 'cuenta' ? 'bg-board-amber text-board-onaccent' : 'bg-board-panel text-board-cream/70'
           }`}
         >
           Cuenta
@@ -109,7 +110,7 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
         <button
           onClick={() => setTab('amigos')}
           className={`px-4 py-2 rounded text-sm font-medium ${
-            tab === 'amigos' ? 'bg-board-amber text-board-bg' : 'bg-board-panel text-board-cream/70'
+            tab === 'amigos' ? 'bg-board-amber text-board-onaccent' : 'bg-board-panel text-board-cream/70'
           }`}
         >
           Amigos
@@ -154,7 +155,7 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
                 </button>
               </div>
             )}
-            {nameError && <p className="text-sm text-red-400 mt-2">{nameError}</p>}
+            {nameError && <p className="text-sm text-board-danger mt-2">{nameError}</p>}
             {nameSuccess && !editingName && (
               <p className="text-sm text-board-teal mt-2">Nombre actualizado.</p>
             )}
@@ -190,17 +191,19 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
                   />
                   <p className="text-xs text-board-cream/40 mt-1 text-right">{bio.length}/200</p>
                 </div>
-                {infoError && <p className="text-sm text-red-400">{infoError}</p>}
+                {infoError && <p className="text-sm text-board-danger">{infoError}</p>}
                 {infoSuccess && <p className="text-sm text-board-teal">Guardado.</p>}
                 <button
                   type="submit"
-                  className="w-full bg-board-amber text-board-bg font-semibold py-2 rounded hover:brightness-110 transition"
+                  className="w-full bg-board-amber text-board-onaccent font-semibold py-2 rounded hover:brightness-110 transition"
                 >
                   Guardar
                 </button>
               </form>
             )}
           </div>
+
+          <ThemePicker />
 
           <div className="bg-board-panel border border-board-line rounded-md overflow-hidden">
             <button
@@ -233,11 +236,11 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
                   placeholder="Repite la contraseña nueva"
                   className="w-full bg-board-bg border border-board-line rounded px-3 py-2 text-sm outline-none focus:border-board-amber"
                 />
-                {passwordError && <p className="text-sm text-red-400">{passwordError}</p>}
+                {passwordError && <p className="text-sm text-board-danger">{passwordError}</p>}
                 {passwordSuccess && <p className="text-sm text-board-teal">Contraseña actualizada.</p>}
                 <button
                   type="submit"
-                  className="w-full bg-board-amber text-board-bg font-semibold py-2 rounded hover:brightness-110 transition"
+                  className="w-full bg-board-amber text-board-onaccent font-semibold py-2 rounded hover:brightness-110 transition"
                 >
                   Cambiar contraseña
                 </button>

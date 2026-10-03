@@ -68,6 +68,29 @@ Abre la URL que te muestre la terminal (normalmente `http://localhost:5173`).
   más intenso el color, más gente libre en esa franja. Pasando el ratón por
   una casilla se ve quién exactamente está libre.
 
+## Temas (Modo rosa)
+
+La app tiene dos temas: **Oscuro** (el panel de siempre, por defecto) y **Rosa**
+(pastel, con flores y lacitos). Se cambia desde **Perfil → Apariencia** (con
+miniaturas) o con el botón pequeño de las pantallas de acceso y de grupos. La
+elección se guarda en el dispositivo (`localStorage`, clave `horario-app-theme`).
+
+Cómo funciona:
+
+- Los colores, tipografías y radios de esquina son **variables CSS**. El tema oscuro
+  las define en `src/index.css`; el rosa las redefine en `src/theme-rosa.css`
+  cuando `<html>` tiene `data-theme="rosa"`.
+- `tailwind.config.js` apunta a esas variables, así que los componentes no saben
+  qué tema hay activo. Los nombres de la paleta se mantienen (`board-amber` =
+  color de acento, `board-teal` = acento secundario) aunque en rosa ya no sean
+  ámbar ni teal.
+- Para nuevos colores usa siempre esas clases (`text-board-danger`,
+  `text-board-onaccent`…) en vez de hex o colores sueltos de Tailwind: si no, no
+  cambiarán con el tema.
+- Los dibujos (lacito, flor, patrón de fondo) están en `src/assets/rosa/*.svg`.
+- `src/lib/theme.js` registra los temas y guarda la elección. Para añadir otro:
+  nuevo bloque de variables + una entrada en `THEMES`.
+
 ## Estructura del proyecto
 
 ```

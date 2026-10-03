@@ -81,7 +81,7 @@ export default function GroupSettings({ config, onSave, onCancel }) {
             onClick={() => toggleDay(day.key)}
             className={`px-3 py-1 rounded-full text-xs font-medium transition ${
               days.includes(day.key)
-                ? 'bg-board-amber text-board-bg'
+                ? 'bg-board-amber text-board-onaccent'
                 : 'bg-board-bg text-board-cream/50 border border-board-line'
             }`}
           >
@@ -112,7 +112,7 @@ export default function GroupSettings({ config, onSave, onCancel }) {
             <button
               type="button"
               onClick={() => removeBreak(i)}
-              className="text-xs text-board-cream/40 hover:text-red-400 ml-2"
+              className="text-xs text-board-cream/40 hover:text-board-danger ml-2"
             >
               Quitar
             </button>
@@ -130,7 +130,7 @@ export default function GroupSettings({ config, onSave, onCancel }) {
       <div className="flex gap-3">
         <button
           onClick={handleSave}
-          className="flex-1 bg-board-amber text-board-bg font-semibold py-2 rounded hover:brightness-110 transition"
+          className="flex-1 bg-board-amber text-board-onaccent font-semibold py-2 rounded hover:brightness-110 transition"
         >
           Guardar
         </button>

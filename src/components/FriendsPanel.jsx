@@ -61,12 +61,12 @@ export default function FriendsPanel({ userId, onViewProfile }) {
         />
         <button
           type="submit"
-          className="bg-board-amber text-board-bg font-semibold px-4 rounded text-sm hover:brightness-110"
+          className="bg-board-amber text-board-onaccent font-semibold px-4 rounded text-sm hover:brightness-110"
         >
           Añadir
         </button>
       </form>
-      {error && <p className="text-sm text-red-400 mb-4">{error}</p>}
+      {error && <p className="text-sm text-board-danger mb-4">{error}</p>}
 
       {incoming.length > 0 && (
         <div className="mb-6">
@@ -87,7 +87,7 @@ export default function FriendsPanel({ userId, onViewProfile }) {
                   </button>
                   <button
                     onClick={() => handleRespond(f.userId, false)}
-                    className="text-sm text-board-cream/40 hover:text-red-400"
+                    className="text-sm text-board-cream/40 hover:text-board-danger"
                   >
                     Rechazar
                   </button>
@@ -110,7 +110,7 @@ export default function FriendsPanel({ userId, onViewProfile }) {
                 <span className="text-sm">{f.name}</span>
                 <button
                   onClick={() => handleRemove(f.userId)}
-                  className="text-sm text-board-cream/40 hover:text-red-400"
+                  className="text-sm text-board-cream/40 hover:text-board-danger"
                 >
                   Cancelar
                 </button>
@@ -138,7 +138,7 @@ export default function FriendsPanel({ userId, onViewProfile }) {
               </button>
               <button
                 onClick={() => handleRemove(f.userId)}
-                className="text-xs text-board-cream/40 hover:text-red-400"
+                className="text-xs text-board-cream/40 hover:text-board-danger"
               >
                 Eliminar
               </button>
