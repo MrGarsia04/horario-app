@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import ThemeToggle from './ThemeToggle'
+import InstallButton from './InstallButton'
 
 export default function GroupsScreen({ userId, username, onEnterGroup, onSignOut, onOpenProfile, onOpenEvents }) {
   const [groups, setGroups] = useState([])
@@ -112,8 +113,11 @@ export default function GroupsScreen({ userId, username, onEnterGroup, onSignOut
         </p>
       </form>
 
-      <div className="mt-8 flex justify-center">
-        <ThemeToggle />
+      <div className="mt-8">
+        <div className="flex flex-wrap items-start justify-center gap-2">
+          <ThemeToggle />
+          <InstallButton />
+        </div>
       </div>
     </div>
   )

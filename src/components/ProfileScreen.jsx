@@ -4,6 +4,7 @@ import { updateProfileInfo, fetchPublicProfile } from '../lib/profile'
 import FriendsPanel from './FriendsPanel'
 import PublicProfile from './PublicProfile'
 import { ThemePicker } from './ThemeToggle'
+import InstallButton from './InstallButton'
 
 export default function ProfileScreen({ userId, username, onUsernameChanged, onBack }) {
   const [tab, setTab] = useState('cuenta')
@@ -204,6 +205,11 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
           </div>
 
           <ThemePicker />
+
+          <div className="bg-board-panel border border-board-line rounded-md p-6">
+            <p className="text-sm text-board-cream/70 mb-3">Instalar la app</p>
+            <InstallButton className="items-start" />
+          </div>
 
           <div className="bg-board-panel border border-board-line rounded-md overflow-hidden">
             <button

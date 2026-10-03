@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { signIn, signUp } from '../lib/auth'
 import ThemeToggle from './ThemeToggle'
+import InstallButton from './InstallButton'
 import bowUrl from '../assets/rosa/bow.svg'
 
 export default function AuthScreen({ onAuthed }) {
@@ -82,8 +83,11 @@ export default function AuthScreen({ onAuthed }) {
           </button>
         </form>
 
-        <div className="mt-5 flex justify-center">
+        <div className="mt-5">
+          <div className="flex flex-wrap items-start justify-center gap-2">
           <ThemeToggle />
+          <InstallButton />
+        </div>
         </div>
       </div>
     </div>
