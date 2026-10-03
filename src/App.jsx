@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabaseClient'
 import { DEFAULT_CONFIG, intervalsOverlap } from './lib/timeSlots'
 import AuthScreen from './components/AuthScreen'
+import InstallButton from './components/InstallButton'
 import GroupsScreen from './components/GroupsScreen'
 import ScheduleGrid from './components/ScheduleGrid'
 import GroupHeatmap from './components/GroupHeatmap'
@@ -259,6 +260,7 @@ const myBirthdayDayKey = birthdayDayKeyForWeek(selectedWeek, myBirthday)
         username={user.username}
         onUsernameChanged={handleUsernameChanged}
         onBack={() => setShowProfile(false)}
+        onSignOut={handleSignOut}
       />
     )
   }
@@ -374,6 +376,16 @@ const myBirthdayDayKey = birthdayDayKeyForWeek(selectedWeek, myBirthday)
           )}
         </>
       )}
+
+      <div className="mt-12 flex flex-wrap items-start justify-center gap-2">
+        <InstallButton />
+        <button
+          onClick={handleSignOut}
+          className="inline-flex items-center text-xs px-3 py-1.5 rounded-full border border-board-line bg-board-panel text-board-cream/70 hover:text-board-cream transition"
+        >
+          Cerrar sesión
+        </button>
+      </div>
     </div>
   )
 }

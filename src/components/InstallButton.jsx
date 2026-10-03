@@ -35,11 +35,17 @@ const STEPS = {
 // Botón para instalar la app. Si el navegador lo permite, abre el diálogo nativo;
 // si no (iPhone, Firefox…), despliega los pasos manuales. Una vez instalada
 // (o abierta ya como app) desaparece.
-export default function InstallButton({ className = '' }) {
+// installedMessage: en vez de desaparecer cuando ya está instalada, muestra un aviso
+// (útil en Perfil, para que no parezca que falta el botón).
+export default function InstallButton({ className = '', installedMessage = false }) {
   const state = useInstallState()
   const [showSteps, setShowSteps] = useState(false)
 
-  if (state === 'installed') return null
+  if (state === 'installed') {
+    return installedMessage ? (
+      <p className="text-sm text-board-teal">✓ La app ya está instalada en este dispositivo.</p>
+    ) : null
+  }
 
   const handleClick = () => {
     if (state === 'prompt') promptInstall()
