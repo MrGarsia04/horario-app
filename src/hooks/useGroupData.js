@@ -49,11 +49,12 @@ export function useGroupMembers(groupCode) {
     queryFn: async () => {
       const { data: memberships, error } = await supabase
         .from('group_memberships')
-        .select('user_id')
+        .select('user_id, role')
         .eq('group_code', groupCode)
       if (error) throw error
 
       const userIds = memberships.map((m) => m.user_id)
+      const roleById = Object.fromEntries(memberships.map((m) => [m.user_id, m.role]))
       if (userIds.length === 0) return { members: [], overridesByUser: {} }
 
       const [{ data: profileRows }, { data: scheduleRows }, { data: overrideRows }] =
@@ -82,6 +83,7 @@ export function useGroupMembers(groupCode) {
         members: userIds.map((id) => ({
           userId: id,
           name: usernames[id] ?? '(desconocido)',
+          role: roleById[id],
           baseSchedule: baseByUser[id] ?? [],
         })),
       }

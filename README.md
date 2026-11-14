@@ -121,3 +121,21 @@ supabase/
 - Añadir el nombre de la asignatura al marcar una franja, no solo
   ocupado/libre.
 - Exportar la franja común elegida como evento de calendario.
+
+
+## Base de datos y migraciones (Supabase Auth + RLS)
+
+El esquema vive en `supabase/migrations/`:
+
+- `0001_base.sql`: esquema heredado (reconstruido del código; revísalo con `npx supabase db pull`).
+- `0002_auth_rls.sql`: Supabase Auth, RLS, roles de grupo, código de invitación y RPCs.
+  **Destructiva para cuentas antiguas**: las copia a `legacy.*` y las borra de `public.*`.
+
+```
+npx supabase link --project-ref <tu-ref>
+npx supabase db push
+```
+
+En el panel de Supabase (Authentication → URL Configuration) añade tu dominio y
+`<dominio>/restablecer` a las Redirect URLs. `npm test` prueba las migraciones en un
+Postgres en memoria (PGlite), sin tocar ninguna base real.

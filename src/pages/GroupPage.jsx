@@ -12,6 +12,7 @@ import MemberList from '../components/MemberList'
 import GroupSettings from '../components/GroupSettings'
 import WeekNavigator from '../components/WeekNavigator'
 import GroupMembersList from '../components/GroupMembersList'
+import InviteBox from '../components/InviteBox'
 
 function birthdayDayKeyForWeek(weekStart, birthday) {
   if (!birthday) return null
@@ -40,6 +41,7 @@ export default function GroupPage({ settings = false }) {
   const members = membersQuery.data?.members ?? []
   const overridesByUser = membersQuery.data?.overridesByUser ?? {}
   const me = members.find((m) => m.userId === user.id)
+  const isAdmin = me?.role === 'owner' || me?.role === 'admin'
 
   const { schedule: mySchedule, isCustomThisWeek } = resolveScheduleForWeek(
     me?.baseSchedule ?? [],
@@ -93,9 +95,11 @@ export default function GroupPage({ settings = false }) {
         <div className="flex items-center gap-4">
           <HeaderButton onClick={() => navigate('/perfil')}>Perfil</HeaderButton>
           <HeaderButton onClick={() => navigate('/planes')}>Planes</HeaderButton>
-          <HeaderButton onClick={() => navigate(settings ? `/g/${codigo}` : `/g/${codigo}/config`)}>
-            {settings ? 'Volver' : 'Configurar horario'}
-          </HeaderButton>
+          {(isAdmin || settings) && (
+            <HeaderButton onClick={() => navigate(settings ? `/g/${codigo}` : `/g/${codigo}/config`)}>
+              {settings ? 'Volver' : 'Configurar horario'}
+            </HeaderButton>
+          )}
           <HeaderButton onClick={handleBackToGroups}>Mis grupos</HeaderButton>
         </div>
       </header>
@@ -159,7 +163,10 @@ export default function GroupPage({ settings = false }) {
               )}
             </>
           ) : (
-            <GroupMembersList members={members} myUserId={user.id} />
+            <>
+              {isAdmin && <InviteBox groupCode={codigo} />}
+              <GroupMembersList members={members} myUserId={user.id} />
+            </>
           )}
         </>
       )}

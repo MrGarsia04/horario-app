@@ -78,7 +78,7 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
       return
     }
 
-    const result = await changePassword(userId, currentPassword, newPassword)
+    const result = await changePassword(currentPassword, newPassword)
     if (result.error) {
       setPasswordError(result.error)
       return

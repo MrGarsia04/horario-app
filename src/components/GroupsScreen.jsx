@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import { useMyGroups, useJoinGroup, useLeaveGroup } from '../hooks/useGroups'
+import { useMyGroups, useJoinGroup, useLeaveGroup, useCreateGroup } from '../hooks/useGroups'
 import ThemeToggle from './ThemeToggle'
 import InstallButton from './InstallButton'
 
 export default function GroupsScreen({ userId, username, onEnterGroup, onSignOut, onOpenProfile, onOpenEvents }) {
   const [newCode, setNewCode] = useState('')
   const [error, setError] = useState('')
+  const [createName, setCreateName] = useState('')
+  const [createError, setCreateError] = useState('')
+  const createGroup = useCreateGroup(userId)
   const groupsQuery = useMyGroups(userId)
   const joinGroup = useJoinGroup(userId)
   const leaveGroup = useLeaveGroup(userId)
@@ -15,14 +18,26 @@ export default function GroupsScreen({ userId, username, onEnterGroup, onSignOut
   async function handleJoin(e) {
     e.preventDefault()
     setError('')
-    const code = newCode.trim().toLowerCase()
-    if (!code) return
-
+    const invite = newCode.trim()
+    if (!invite) return
     try {
-      await joinGroup.mutateAsync(code)
+      await joinGroup.mutateAsync(invite)
       setNewCode('')
     } catch (err) {
-      setError(err.code === '23505' ? 'Ya estás en ese grupo.' : err.message)
+      setError(err.message)
+    }
+  }
+
+  async function handleCreate(e) {
+    e.preventDefault()
+    setCreateError('')
+    const code = createName.trim().toLowerCase()
+    if (!code) return
+    try {
+      await createGroup.mutateAsync(code)
+      setCreateName('')
+    } catch (err) {
+      setCreateError(err.message)
     }
   }
 
@@ -77,20 +92,38 @@ export default function GroupsScreen({ userId, username, onEnterGroup, onSignOut
         </ul>
       )}
 
-      <form onSubmit={handleJoin} className="bg-board-panel border border-board-line rounded-md p-6">
+      <form onSubmit={handleJoin} className="bg-board-panel border border-board-line rounded-md p-6 mb-4">
         <label className="block text-sm text-board-cream/70 mb-1">Unirte a un grupo</label>
         <input
           value={newCode}
           onChange={(e) => setNewCode(e.target.value)}
-          placeholder="p.ej. ing-4b"
-          className="w-full mb-3 bg-board-bg border border-board-line rounded px-3 py-2 outline-none focus:border-board-amber"
+          placeholder="código de invitación"
+          autoComplete="off"
+          className="w-full mb-3 bg-board-bg border border-board-line rounded px-3 py-2 font-mono text-sm outline-none focus:border-board-amber"
         />
         {error && <p className="text-sm text-board-danger mb-3">{error}</p>}
         <button type="submit" className="w-full bg-board-amber text-board-onaccent font-semibold py-2 rounded hover:brightness-110 transition">
-          Unirme / crear grupo
+          Unirme
         </button>
         <p className="text-xs text-board-cream/40 mt-3">
-          Si el código no existe todavía, se crea un grupo nuevo automáticamente.
+          Pídele el código de invitación a quien administre el grupo.
+        </p>
+      </form>
+
+      <form onSubmit={handleCreate} className="bg-board-panel border border-board-line rounded-md p-6">
+        <label className="block text-sm text-board-cream/70 mb-1">Crear un grupo nuevo</label>
+        <input
+          value={createName}
+          onChange={(e) => setCreateName(e.target.value)}
+          placeholder="p.ej. ing-4b"
+          className="w-full mb-3 bg-board-bg border border-board-line rounded px-3 py-2 outline-none focus:border-board-amber"
+        />
+        {createError && <p className="text-sm text-board-danger mb-3">{createError}</p>}
+        <button type="submit" className="w-full border border-board-amber text-board-amber font-semibold py-2 rounded hover:brightness-110 transition">
+          Crear grupo
+        </button>
+        <p className="text-xs text-board-cream/40 mt-3">
+          Serás el propietario y podrás compartir el código de invitación.
         </p>
       </form>
 

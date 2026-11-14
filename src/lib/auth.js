@@ -1,109 +1,91 @@
 import { supabase } from './supabaseClient'
 
-// Hash simple (SHA-256) para no guardar contraseñas en texto plano.
-// Esto es un filtro razonable para un grupo de confianza, no una capa de
-// seguridad de nivel bancario.
-async function hashPassword(password) {
-  const bytes = new TextEncoder().encode(password)
-  const digest = await crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+// Autenticación con Supabase Auth (email + contraseña). La sesión la gestiona supabase-js
+// (persistente y con refresco automático); aquí solo hay envoltorios que devuelven
+// { data } o { error } con mensajes en español.
+
+export const MIN_PASSWORD = 6
+
+function translateAuthError(error) {
+  const msg = (error?.message ?? '').toLowerCase()
+  if (msg.includes('username_taken')) return 'Ese nombre de usuario ya está en uso, prueba con otro.'
+  if (msg.includes('invalid login credentials')) return 'Email o contraseña incorrectos.'
+  if (msg.includes('email not confirmed')) return 'Confirma tu email antes de entrar (revisa tu bandeja).'
+  if (msg.includes('already registered') || msg.includes('already been registered'))
+    return 'Ya existe una cuenta con ese email.'
+  if (msg.includes('password should be at least')) return `La contraseña debe tener al menos ${MIN_PASSWORD} caracteres.`
+  if (msg.includes('rate limit') || error?.status === 429) return 'Demasiados intentos. Espera un poco y vuelve a probar.'
+  if (msg.includes('same password')) return 'La contraseña nueva debe ser distinta de la actual.'
+  if (msg.includes('database error saving new user')) return 'No se pudo crear la cuenta (¿nombre de usuario ya en uso?).'
+  return error?.message || 'Ha ocurrido un error. Inténtalo de nuevo.'
 }
 
-export async function signUp(username, password) {
-  const trimmed = username.trim()
-  if (!trimmed || !password) {
-    return { error: 'Rellena usuario y contraseña.' }
-  }
-  if (password.length < 4) {
-    return { error: 'La contraseña debe tener al menos 4 caracteres.' }
-  }
+export async function signUp(username, email, password) {
+  const name = username.trim()
+  const mail = email.trim()
+  if (!name || !mail || !password) return { error: 'Rellena nombre de usuario, email y contraseña.' }
+  if (name.length < 2 || name.length > 30) return { error: 'El nombre de usuario debe tener entre 2 y 30 caracteres.' }
+  if (password.length < MIN_PASSWORD) return { error: `La contraseña debe tener al menos ${MIN_PASSWORD} caracteres.` }
 
-  const { data: existing } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('username', trimmed)
-    .maybeSingle()
+  const { data: available, error: availErr } = await supabase.rpc('username_available', { p_username: name })
+  if (!availErr && available === false) return { error: 'Ese nombre de usuario ya está en uso, prueba con otro.' }
 
-  if (existing) {
-    return { error: 'Ese nombre de usuario ya está en uso, prueba con otro.' }
-  }
-
-  const password_hash = await hashPassword(password)
-  const { data, error } = await supabase
-    .from('profiles')
-    .insert({ username: trimmed, password_hash })
-    .select('id, username')
-    .single()
-
-  if (error) return { error: error.message }
-  return { data }
+  const { data, error } = await supabase.auth.signUp({
+    email: mail,
+    password,
+    options: { data: { username: name }, emailRedirectTo: window.location.origin },
+  })
+  if (error) return { error: translateAuthError(error) }
+  // Con "Confirm email" activado en Supabase no hay sesión hasta confirmar.
+  return { data: { needsConfirmation: !data.session } }
 }
 
-export async function signIn(username, password) {
-  const trimmed = username.trim()
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, username, password_hash')
-    .eq('username', trimmed)
-    .maybeSingle()
+export async function signIn(email, password) {
+  if (!email.trim() || !password) return { error: 'Rellena email y contraseña.' }
+  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+  if (error) return { error: translateAuthError(error) }
+  return { data: data.user }
+}
 
-  if (error || !data) {
-    return { error: 'Usuario o contraseña incorrectos.' }
-  }
+export async function signOut() {
+  await supabase.auth.signOut()
+}
 
-  const hash = await hashPassword(password)
-  if (hash !== data.password_hash) {
-    return { error: 'Usuario o contraseña incorrectos.' }
-  }
+export async function requestPasswordReset(email) {
+  if (!email.trim()) return { error: 'Escribe tu email.' }
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo: `${window.location.origin}/restablecer`,
+  })
+  if (error) return { error: translateAuthError(error) }
+  return { data: true }
+}
 
-  return { data: { id: data.id, username: data.username } }
+// Para el flujo de recuperación (ya hay sesión temporal tras abrir el enlace del email).
+export async function setNewPassword(newPassword) {
+  if (newPassword.length < MIN_PASSWORD) return { error: `La contraseña nueva debe tener al menos ${MIN_PASSWORD} caracteres.` }
+  const { error } = await supabase.auth.updateUser({ password: newPassword })
+  if (error) return { error: translateAuthError(error) }
+  return { data: true }
+}
+
+export async function changePassword(currentPassword, newPassword) {
+  if (newPassword.length < MIN_PASSWORD) return { error: `La contraseña nueva debe tener al menos ${MIN_PASSWORD} caracteres.` }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user?.email) return { error: 'No se pudo verificar tu cuenta.' }
+
+  const { error: checkErr } = await supabase.auth.signInWithPassword({ email: user.email, password: currentPassword })
+  if (checkErr) return { error: 'La contraseña actual no es correcta.' }
+
+  return setNewPassword(newPassword)
 }
 
 export async function updateUsername(userId, newUsername) {
   const trimmed = newUsername.trim()
-  if (!trimmed) return { error: 'El nombre de usuario no puede estar vacío.' }
-
-  const { data: existing } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('username', trimmed)
-    .maybeSingle()
-
-  if (existing && existing.id !== userId) {
-    return { error: 'Ese nombre de usuario ya está en uso.' }
-  }
+  if (trimmed.length < 2 || trimmed.length > 30) return { error: 'El nombre debe tener entre 2 y 30 caracteres.' }
 
   const { error } = await supabase.from('profiles').update({ username: trimmed }).eq('id', userId)
-  if (error) return { error: error.message }
+  if (error) {
+    return { error: error.code === '23505' ? 'Ese nombre de usuario ya está en uso.' : error.message }
+  }
   return { data: { username: trimmed } }
-}
-
-export async function changePassword(userId, currentPassword, newPassword) {
-  if (newPassword.length < 4) {
-    return { error: 'La contraseña nueva debe tener al menos 4 caracteres.' }
-  }
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('password_hash')
-    .eq('id', userId)
-    .maybeSingle()
-
-  if (error || !data) return { error: 'No se pudo verificar tu cuenta.' }
-
-  const currentHash = await hashPassword(currentPassword)
-  if (currentHash !== data.password_hash) {
-    return { error: 'La contraseña actual no es correcta.' }
-  }
-
-  const newHash = await hashPassword(newPassword)
-  const { error: updateError } = await supabase
-    .from('profiles')
-    .update({ password_hash: newHash })
-    .eq('id', userId)
-
-  if (updateError) return { error: updateError.message }
-  return { data: true }
 }
