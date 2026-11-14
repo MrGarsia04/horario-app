@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { updateUsername, changePassword } from '../lib/auth'
 import { updateProfileInfo, fetchPublicProfile } from '../lib/profile'
 import FriendsPanel from './FriendsPanel'
@@ -7,6 +8,7 @@ import { ThemePicker } from './ThemeToggle'
 import InstallButton from './InstallButton'
 
 export default function ProfileScreen({ userId, username, onUsernameChanged, onBack, onSignOut }) {
+  const queryClient = useQueryClient()
   const [tab, setTab] = useState('cuenta')
   const [viewingProfileId, setViewingProfileId] = useState(null)
 
@@ -63,6 +65,7 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
       return
     }
     setInfoSuccess(true)
+    queryClient.invalidateQueries({ queryKey: ['profile', userId] })
   }
 
   async function handleChangePassword(e) {

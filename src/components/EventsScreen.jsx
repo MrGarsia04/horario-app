@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import { loadMyEvents, respondToEvent, deleteEvent } from '../lib/events'
+import { useState } from 'react'
+import { useMyEvents, useRefreshSocial } from '../hooks/useSocial'
+import { respondToEvent, deleteEvent } from '../lib/events'
 import CreateEventForm from './CreateEventForm'
 
 function formatEventDate(dateStr) {
@@ -8,21 +9,12 @@ function formatEventDate(dateStr) {
 }
 
 export default function EventsScreen({ userId, onBack }) {
-  const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
+  const eventsQuery = useMyEvents(userId)
+  const load = useRefreshSocial(userId)
+  const events = eventsQuery.data ?? []
+  const loading = eventsQuery.isLoading
   const [showForm, setShowForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState(null)
-
-  useEffect(() => {
-    load()
-  }, [])
-
-  async function load() {
-    setLoading(true)
-    const result = await loadMyEvents(userId)
-    if (result.data) setEvents(result.data)
-    setLoading(false)
-  }
 
   async function handleRespond(eventId, status) {
     await respondToEvent(eventId, userId, status)

@@ -1,28 +1,16 @@
-import { useEffect, useState } from 'react'
-import { loadFriendData, sendFriendRequest, respondToRequest, removeFriendOrCancel } from '../lib/friends'
+import { useState } from 'react'
+import { useFriendData, useRefreshSocial } from '../hooks/useSocial'
+import { sendFriendRequest, respondToRequest, removeFriendOrCancel } from '../lib/friends'
 
 export default function FriendsPanel({ userId, onViewProfile }) {
-  const [friends, setFriends] = useState([])
-  const [incoming, setIncoming] = useState([])
-  const [outgoing, setOutgoing] = useState([])
+  const friendQuery = useFriendData(userId)
+  const load = useRefreshSocial(userId)
+  const friends = friendQuery.data?.friends ?? []
+  const incoming = friendQuery.data?.incoming ?? []
+  const outgoing = friendQuery.data?.outgoing ?? []
   const [usernameInput, setUsernameInput] = useState('')
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    load()
-  }, [])
-
-  async function load() {
-    setLoading(true)
-    const result = await loadFriendData(userId)
-    if (result.data) {
-      setFriends(result.data.friends)
-      setIncoming(result.data.incoming)
-      setOutgoing(result.data.outgoing)
-    }
-    setLoading(false)
-  }
+  const loading = friendQuery.isLoading
 
   async function handleSend(e) {
     e.preventDefault()

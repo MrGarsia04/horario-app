@@ -1,29 +1,16 @@
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
+import { useState } from 'react'
+import { useMyGroups, useJoinGroup, useLeaveGroup } from '../hooks/useGroups'
 import ThemeToggle from './ThemeToggle'
 import InstallButton from './InstallButton'
 
 export default function GroupsScreen({ userId, username, onEnterGroup, onSignOut, onOpenProfile, onOpenEvents }) {
-  const [groups, setGroups] = useState([])
   const [newCode, setNewCode] = useState('')
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    loadGroups()
-  }, [])
-
-  async function loadGroups() {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('group_memberships')
-      .select('group_code')
-      .eq('user_id', userId)
-      .order('joined_at', { ascending: true })
-
-    if (!error) setGroups((data ?? []).map((r) => r.group_code))
-    setLoading(false)
-  }
+  const groupsQuery = useMyGroups(userId)
+  const joinGroup = useJoinGroup(userId)
+  const leaveGroup = useLeaveGroup(userId)
+  const groups = groupsQuery.data ?? []
+  const loading = groupsQuery.isLoading
 
   async function handleJoin(e) {
     e.preventDefault()
@@ -31,25 +18,19 @@ export default function GroupsScreen({ userId, username, onEnterGroup, onSignOut
     const code = newCode.trim().toLowerCase()
     if (!code) return
 
-    const { error } = await supabase
-      .from('group_memberships')
-      .insert({ user_id: userId, group_code: code })
-
-    if (error) {
-      setError(error.code === '23505' ? 'Ya estás en ese grupo.' : error.message)
-      return
+    try {
+      await joinGroup.mutateAsync(code)
+      setNewCode('')
+    } catch (err) {
+      setError(err.code === '23505' ? 'Ya estás en ese grupo.' : err.message)
     }
-    setNewCode('')
-    loadGroups()
   }
 
-  async function handleLeave(code) {
+  function handleLeave(code) {
     const ok = window.confirm(
       `¿Salir del grupo "${code}"? Podrás volver a entrar más tarde con el mismo código.`
     )
-    if (!ok) return
-    await supabase.from('group_memberships').delete().eq('user_id', userId).eq('group_code', code)
-    loadGroups()
+    if (ok) leaveGroup.mutate(code)
   }
 
   return (

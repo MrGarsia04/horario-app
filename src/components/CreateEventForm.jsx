@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { loadFriendData } from '../lib/friends'
+import { useState } from 'react'
+import { useFriendData } from '../hooks/useSocial'
 import { createEvent, updateEvent } from '../lib/events'
 
 const MONTHS = [
@@ -27,7 +27,7 @@ export default function CreateEventForm({ userId, event, existingInviteeIds = []
   const isEditing = Boolean(event)
   const initialDate = event ? new Date(event.event_date + 'T00:00:00') : new Date()
 
-  const [friends, setFriends] = useState([])
+  const friends = useFriendData(userId).data?.friends ?? []
   const [selectedIds, setSelectedIds] = useState(existingInviteeIds)
   const [title, setTitle] = useState(event?.title ?? '')
   const [description, setDescription] = useState(event?.description ?? '')
@@ -38,11 +38,6 @@ export default function CreateEventForm({ userId, event, existingInviteeIds = []
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    loadFriendData(userId).then((result) => {
-      if (result.data) setFriends(result.data.friends)
-    })
-  }, [userId])
 
   function toggleFriend(id) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
