@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { signIn, signUp, requestPasswordReset, MIN_PASSWORD } from '../lib/auth'
+import { signIn, signUp, claimLegacyAccount, requestPasswordReset, MIN_PASSWORD } from '../lib/auth'
 import ThemeToggle from './ThemeToggle'
 import InstallButton from './InstallButton'
 import bowUrl from '../assets/rosa/bow.svg'
@@ -11,6 +11,7 @@ export default function AuthScreen() {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [oldPassword, setOldPassword] = useState('')
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
@@ -29,15 +30,23 @@ export default function AuthScreen() {
 
     let result
     if (mode === 'login') result = await signIn(email, password)
+    else if (mode === 'legacy') result = await claimLegacyAccount(username, oldPassword, email, password)
     else if (mode === 'signup') result = await signUp(username, email, password)
     else result = await requestPasswordReset(email)
 
     setLoading(false)
+    if (result.error === 'LEGACY_USERNAME') {
+      setUsername(email)
+      setEmail('')
+      setMode('legacy')
+      setInfo('Eso parece un nombre de usuario antiguo. Rellena estos datos para pasar tu cuenta al nuevo sistema; no pierdes nada.')
+      return
+    }
     if (result.error) {
       setError(result.error)
       return
     }
-    if (mode === 'signup' && result.data.needsConfirmation) {
+    if ((mode === 'signup' || mode === 'legacy') && result.data.needsConfirmation) {
       switchMode('login')
       setInfo('Cuenta creada. Te hemos enviado un email: confírmalo para poder entrar.')
     } else if (mode === 'forgot') {
@@ -45,7 +54,7 @@ export default function AuthScreen() {
     }
   }
 
-  const title = mode === 'login' ? 'Inicia sesión' : mode === 'signup' ? 'Crea tu cuenta' : 'Recupera tu contraseña'
+  const title = mode === 'login' ? 'Inicia sesión' : mode === 'signup' ? 'Crea tu cuenta' : mode === 'legacy' ? 'Pasa tu cuenta antigua' : 'Recupera tu contraseña'
   const inputClass =
     'w-full mb-4 bg-board-bg border border-board-line rounded px-3 py-2 outline-none focus:border-board-amber'
 
@@ -59,9 +68,9 @@ export default function AuthScreen() {
           <p className="font-mono text-board-amber text-xs tracking-wide mb-1">panel de horarios</p>
           <h1 className="text-2xl font-semibold mb-6">{title}</h1>
 
-          {mode === 'signup' && (
+          {(mode === 'signup' || mode === 'legacy') && (
             <>
-              <label className="block text-sm text-board-cream/70 mb-1">Nombre de usuario</label>
+              <label className="block text-sm text-board-cream/70 mb-1">{mode === 'legacy' ? 'Tu nombre de usuario de siempre' : 'Nombre de usuario'}</label>
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -72,7 +81,20 @@ export default function AuthScreen() {
             </>
           )}
 
-          <label className="block text-sm text-board-cream/70 mb-1">Email</label>
+          {mode === 'legacy' && (
+            <>
+              <label className="block text-sm text-board-cream/70 mb-1">Tu contraseña de siempre</label>
+              <input
+                type="password"
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+                autoComplete="off"
+                className={inputClass}
+              />
+            </>
+          )}
+
+          <label className="block text-sm text-board-cream/70 mb-1">{mode === 'legacy' ? 'Email (a partir de ahora entrarás con él)' : 'Email'}</label>
           <input
             type="email"
             value={email}
@@ -84,7 +106,7 @@ export default function AuthScreen() {
 
           {mode !== 'forgot' && (
             <>
-              <label className="block text-sm text-board-cream/70 mb-1">Contraseña</label>
+              <label className="block text-sm text-board-cream/70 mb-1">{mode === 'legacy' ? 'Contraseña nueva' : 'Contraseña'}</label>
               <input
                 type="password"
                 value={password}
@@ -93,12 +115,21 @@ export default function AuthScreen() {
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 className="w-full mb-2 bg-board-bg border border-board-line rounded px-3 py-2 outline-none focus:border-board-amber"
               />
-              {mode === 'signup' && (
+              {(mode === 'signup' || mode === 'legacy') && (
                 <p className="text-xs text-board-cream/40 mb-4">Mínimo {MIN_PASSWORD} caracteres.</p>
               )}
             </>
           )}
 
+          {mode === 'login' && (
+            <button
+              type="button"
+              onClick={() => switchMode('legacy')}
+              className="text-xs text-board-amber hover:brightness-110 mb-2 block"
+            >
+              Ya tenía cuenta de antes (solo con usuario)
+            </button>
+          )}
           {mode === 'login' && (
             <button
               type="button"
@@ -121,17 +152,17 @@ export default function AuthScreen() {
               ? 'Un momento…'
               : mode === 'login'
                 ? 'Entrar'
-                : mode === 'signup'
-                  ? 'Crear cuenta'
+                : mode === 'signup' || mode === 'legacy'
+                  ? mode === 'legacy' ? 'Pasar mi cuenta' : 'Crear cuenta'
                   : 'Enviar enlace'}
           </button>
 
           <button
             type="button"
-            onClick={() => switchMode(mode === 'signup' ? 'login' : mode === 'login' ? 'signup' : 'login')}
+            onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}
             className="w-full text-center text-sm text-board-cream/50 hover:text-board-cream mt-4"
           >
-            {mode === 'login' ? '¿No tienes cuenta? Créala' : mode === 'signup' ? '¿Ya tienes cuenta? Inicia sesión' : 'Volver a iniciar sesión'}
+            {mode === 'login' ? '¿No tienes cuenta? Créala' : '← Volver a iniciar sesión'}
           </button>
         </form>
 

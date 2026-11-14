@@ -40,8 +40,38 @@ export async function signUp(username, email, password) {
   return { data: { needsConfirmation: !data.session } }
 }
 
+// SOLO para reclamar cuentas antiguas: las contraseñas antiguas se guardaban como SHA-256
+// y la base de datos las compara con este hash. Se puede borrar cuando todos hayan migrado.
+async function legacyHash(password) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password))
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+// Usuario antiguo (sin email) que entra por primera vez: demuestra su contraseña antigua y
+// elige email + contraseña nueva. Su perfil, grupos y horarios se conservan.
+export async function claimLegacyAccount(username, oldPassword, email, newPassword) {
+  const name = username.trim()
+  const mail = email.trim()
+  if (!name || !oldPassword || !mail || !newPassword) return { error: 'Rellena todos los campos.' }
+  if (newPassword.length < MIN_PASSWORD) return { error: `La contraseña nueva debe tener al menos ${MIN_PASSWORD} caracteres.` }
+
+  const hash = await legacyHash(oldPassword)
+  const { data: valid, error: checkErr } = await supabase.rpc('legacy_claim_valid', { p_username: name, p_hash: hash })
+  if (checkErr) return { error: translateAuthError(checkErr) }
+  if (!valid) return { error: 'Usuario o contraseña antigua incorrectos (o esa cuenta ya fue migrada: entra con tu email).' }
+
+  const { data, error } = await supabase.auth.signUp({
+    email: mail,
+    password: newPassword,
+    options: { data: { legacy_username: name, legacy_hash: hash }, emailRedirectTo: window.location.origin },
+  })
+  if (error) return { error: translateAuthError(error) }
+  return { data: { needsConfirmation: !data.session } }
+}
+
 export async function signIn(email, password) {
   if (!email.trim() || !password) return { error: 'Rellena email y contraseña.' }
+  if (!email.includes('@')) return { error: 'LEGACY_USERNAME' }
   const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
   if (error) return { error: translateAuthError(error) }
   return { data: data.user }

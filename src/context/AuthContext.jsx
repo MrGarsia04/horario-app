@@ -13,7 +13,7 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const queryClient = useQueryClient()
   const [session, setSession] = useState(null)
-  const [username, setUsername] = useState(null)
+  const [profile, setProfile] = useState(null) // null = sin cargar, false = no existe
   const [loading, setLoading] = useState(true)
   const [recovering, setRecovering] = useState(false)
 
@@ -31,7 +31,7 @@ export function AuthProvider({ children }) {
       setSession(next)
       if (event === 'PASSWORD_RECOVERY') setRecovering(true)
       if (event === 'SIGNED_OUT') {
-        setUsername(null)
+        setProfile(null)
         setRecovering(false)
         queryClient.clear()
       }
@@ -39,22 +39,26 @@ export function AuthProvider({ children }) {
     return () => sub.subscription.unsubscribe()
   }, [queryClient])
 
-  const userId = session?.user?.id
+  // El perfil de la app (profiles.id) puede diferir del id de Auth en cuentas migradas.
+  const authId = session?.user?.id
   useEffect(() => {
-    if (!userId) return
+    if (!authId) {
+      setProfile(null)
+      return
+    }
     let cancelled = false
     supabase
       .from('profiles')
-      .select('username')
-      .eq('id', userId)
+      .select('id, username')
+      .eq('auth_id', authId)
       .maybeSingle()
       .then(({ data }) => {
-        if (!cancelled && data) setUsername(data.username)
+        if (!cancelled) setProfile(data ?? false)
       })
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [authId])
 
   const signOut = useCallback(async () => {
     localStorage.removeItem(ACTIVE_GROUP_KEY)
@@ -63,26 +67,24 @@ export function AuthProvider({ children }) {
 
   const user = useMemo(
     () =>
-      session?.user
-        ? {
-            id: session.user.id,
-            email: session.user.email,
-            username: username ?? session.user.user_metadata?.username ?? '',
-          }
+      session?.user && profile
+        ? { id: profile.id, authId: session.user.id, email: session.user.email, username: profile.username }
         : null,
-    [session, username]
+    [session, profile]
   )
+  // Con sesión pero sin perfil cargado todavía, seguimos "cargando".
+  const stillLoading = loading || (Boolean(session?.user) && profile === null)
 
   const value = useMemo(
     () => ({
       user,
-      loading,
+      loading: stillLoading,
       recovering,
       finishRecovery: () => setRecovering(false),
-      usernameChanged: setUsername,
+      usernameChanged: (username) => setProfile((p) => (p ? { ...p, username } : p)),
       signOut,
     }),
-    [user, loading, recovering, signOut]
+    [user, stillLoading, recovering, signOut]
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

@@ -9,6 +9,8 @@ const A = '00000000-0000-0000-0000-00000000000a'
 const B = '00000000-0000-0000-0000-00000000000b'
 const C = '00000000-0000-0000-0000-00000000000c'
 const LEGACY = '00000000-0000-0000-0000-0000000000ff'
+const LEGACY_AUTH = '00000000-0000-0000-0000-0000000000fe'
+const HASH = 'abc123'
 
 let db
 
@@ -49,9 +51,10 @@ beforeAll(async () => {
   `)
   await db.exec(sql('0001_base.sql'))
   // Datos heredados: un usuario antiguo con horario y grupo
-  await q(`insert into profiles (id, username, password_hash) values ($1, 'viejo', 'abc')`, [LEGACY])
+  await q(`insert into profiles (id, username, password_hash) values ($1, 'viejo', '${HASH}')`, [LEGACY])
   await q(`insert into group_memberships (user_id, group_code) values ($1, 'old')`, [LEGACY])
-  await q(`insert into schedules (group_code, user_id) values ('old', $1)`, [LEGACY])
+  await q(`insert into schedules (group_code, user_id, busy_slots) values ('old', $1, '[{"day":"mon"}]')`, [LEGACY])
+  await q(`insert into group_settings (group_code, config) values ('old', '{"k":1}')`)
   // Como en Supabase: privilegios por defecto a los roles de la API
   await db.exec(`alter default privileges in schema public grant all on tables to anon, authenticated;
                  alter default privileges in schema public grant execute on functions to anon, authenticated;
@@ -60,15 +63,60 @@ beforeAll(async () => {
   await db.exec(sql('0002_auth_rls.sql'))
 })
 
-describe('0002: migración de datos heredados', () => {
-  it('copia a legacy y limpia public', async () => {
-    expect((await q(`select count(*)::int n from legacy.profiles`)).rows[0].n).toBe(1)
-    expect((await q(`select count(*)::int n from public.profiles`)).rows[0].n).toBe(0)
-    expect((await q(`select count(*)::int n from public.group_memberships`)).rows[0].n).toBe(0)
+describe('0002: conserva los datos heredados', () => {
+  it('no borra nada de public', async () => {
+    expect((await q(`select count(*)::int n from public.profiles`)).rows[0].n).toBe(1)
+    expect((await q(`select count(*)::int n from public.group_memberships`)).rows[0].n).toBe(1)
+    expect((await q(`select count(*)::int n from public.schedules where busy_slots::text like '%mon%'`)).rows[0].n).toBe(1)
   })
-  it('profiles ya no tiene password_hash', async () => {
+  it('crea el grupo antiguo con su miembro como owner y le pone invitación', async () => {
+    const r = await q(`select g.code, m.role from groups g join group_memberships m on m.group_code = g.code`)
+    expect(r.rows).toEqual([{ code: 'old', role: 'owner' }])
+    expect((await q(`select count(*)::int n from group_invites`)).rows[0].n).toBe(1)
+  })
+  it('el hash antiguo ya no está en profiles y ningún cliente lo lee', async () => {
     const r = await q(`select 1 from information_schema.columns where table_name='profiles' and table_schema='public' and column_name='password_hash'`)
     expect(r.rows).toHaveLength(0)
+    await as(A, async () => expect(await fails(`select * from legacy_credentials`)).toMatch(/permission denied|row-level/))
+  })
+  it('el usuario antiguo figura como pendiente de reclamar', async () => {
+    expect((await q(`select legacy_account_pending('VIEJO') r`)).rows[0].r).toBe(true)
+    expect((await q(`select legacy_account_pending('nadie') r`)).rows[0].r).toBe(false)
+  })
+})
+
+describe('reclamar cuenta antigua', () => {
+  const claim = (hash, name = 'viejo') =>
+    q(`insert into auth.users (id,email,raw_user_meta_data) values ($1,'viejo@x.com',$2)`, [
+      LEGACY_AUTH,
+      JSON.stringify({ legacy_username: name, legacy_hash: hash }),
+    ])
+  it('con contraseña antigua incorrecta falla y no crea nada', async () => {
+    expect(await fails(`insert into auth.users (id,email,raw_user_meta_data) values ($1,'viejo@x.com',$2)`, [LEGACY_AUTH, JSON.stringify({ legacy_username: 'viejo', legacy_hash: 'mal' })])).toMatch(/invalid_legacy_credentials/)
+    expect((await q(`select count(*)::int n from auth.users`)).rows[0].n).toBe(0)
+  })
+  it('legacy_claim_valid distingue hash bueno y malo', async () => {
+    expect((await q(`select legacy_claim_valid('viejo', 'mal') r`)).rows[0].r).toBe(false)
+    expect((await q(`select legacy_claim_valid('viejo', $1) r`, [HASH])).rows[0].r).toBe(true)
+  })
+  it('con la correcta enlaza el perfil existente (mismo id) a la cuenta nueva', async () => {
+    await claim(HASH.toUpperCase())
+    const r = await q(`select id, auth_id from profiles where username='viejo'`)
+    expect(r.rows[0]).toEqual({ id: LEGACY, auth_id: LEGACY_AUTH })
+    expect((await q(`select count(*)::int n from legacy_credentials`)).rows[0].n).toBe(0)
+    expect((await q(`select legacy_account_pending('viejo') r`)).rows[0].r).toBe(false)
+  })
+  it('ya con sesión ve sus datos de siempre y es owner de su grupo', async () => {
+    await as(LEGACY_AUTH, async () => {
+      expect((await q(`select me() m`)).rows[0].m).toBe(LEGACY)
+      expect((await q(`select group_code from group_memberships`)).rows).toEqual([{ group_code: 'old' }])
+      expect((await q(`select busy_slots from schedules`)).rows).toHaveLength(1)
+      expect((await q(`select config from group_settings`)).rows).toHaveLength(1)
+      expect((await q(`select get_invite_code('old') c`)).rows[0].c).toHaveLength(24)
+    })
+  })
+  it('no se puede reclamar dos veces', async () => {
+    expect(await fails(`insert into auth.users (id,email,raw_user_meta_data) values (gen_random_uuid(),'otro@x.com',$1)`, [JSON.stringify({ legacy_username: 'viejo', legacy_hash: HASH })])).toMatch(/invalid_legacy_credentials/)
   })
 })
 
@@ -165,7 +213,7 @@ describe('grupos, roles e invitación', () => {
     await as(A, () => q(`select leave_group('mi-grupo')`))
     expect((await q(`select role from group_memberships where user_id=$1`, [B])).rows[0].role).toBe('owner')
     await as(B, () => q(`select leave_group('mi-grupo')`))
-    expect((await q(`select count(*)::int n from groups`)).rows[0].n).toBe(0)
+    expect((await q(`select count(*)::int n from groups where code='mi-grupo'`)).rows[0].n).toBe(0)
   })
 })
 

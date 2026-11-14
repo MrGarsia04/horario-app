@@ -129,7 +129,8 @@ El esquema vive en `supabase/migrations/`:
 
 - `0001_base.sql`: esquema heredado (reconstruido del código; revísalo con `npx supabase db pull`).
 - `0002_auth_rls.sql`: Supabase Auth, RLS, roles de grupo, código de invitación y RPCs.
-  **Destructiva para cuentas antiguas**: las copia a `legacy.*` y las borra de `public.*`.
+  **No borra datos**: las cuentas antiguas conservan su perfil, grupos y horarios; la primera vez
+  que entran la app les pide email y contraseña nueva (pantalla «Ya tenía cuenta de antes»).
 
 ```
 npx supabase link --project-ref <tu-ref>
