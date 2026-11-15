@@ -94,7 +94,7 @@ for (const [label, width, height, dpr] of sizes) {
     await context.addInitScript(([s, t]) => {
       localStorage.setItem('sb-127-auth-token', s)
       localStorage.setItem('horario-app-theme', t === 'rosa' ? 'rosa' : 'panel')
-      if (!sessionStorage.getItem('ver-tutorial')) localStorage.setItem('opf-tutorial-v1', '1')
+      if (!sessionStorage.getItem('ver-tutorial')) { localStorage.setItem('opf-tutorial-v1', '1'); localStorage.setItem('opf-tutorial-v2', '1') }
     }, [session, theme])
     const page = await context.newPage()
     const errors = []
@@ -102,6 +102,35 @@ for (const [label, width, height, dpr] of sizes) {
     const shot = async (name) => page.screenshot({ path: `${OUT}${label}-${theme}-${name}.png` })
     const goto = async (path) => { await page.goto(BASE + path); await page.waitForTimeout(900) }
 
+    if (process.env.FLOW === '3d') {
+      // Recorrido guiado desde cero (tutorial sin marcar) + Planes y Grupo con los cambios de la fase 3d
+      await goto('/grupos')
+      await page.evaluate(() => { sessionStorage.setItem('ver-tutorial', '1'); localStorage.removeItem('opf-tutorial-v2') })
+      await goto('/g/informaticos')
+      await shot('1-tour-inicio')
+      const next = page.getByRole('button', { name: /^(Empezar|Siguiente)$/ })
+      let n = 2
+      for (let k = 0; k < 7; k++) {
+        if (!(await next.isVisible().catch(() => false))) break
+        await next.click()
+        await page.waitForTimeout(900)
+        await shot(`${n++}-tour-paso`)
+      }
+      const listo = page.getByRole('button', { name: 'Listo' })
+      if (await listo.isVisible().catch(() => false)) await listo.click()
+      await page.waitForTimeout(300)
+      await goto('/g/informaticos/grupo')
+      await shot('9-grupo-ventana-auto')
+      await goto('/planes')
+      await shot('10-planes-semana')
+      await page.getByRole('button', { name: 'Semana siguiente' }).click()
+      await page.waitForTimeout(500)
+      await shot('11-planes-otra-semana')
+      await page.getByRole('button', { name: 'Ajustes' }).click()
+      await page.waitForTimeout(300)
+      await shot('12-ajustes')
+      await page.getByRole('button', { name: 'Cerrar' }).first().click()
+    } else {
     await goto('/g/informaticos')
     await shot('1-horario')
     await page.getByRole('tab', { name: /^Capas/ }).click()
@@ -143,6 +172,7 @@ for (const [label, width, height, dpr] of sizes) {
     await page.waitForTimeout(300)
     await shot('13-ajustes')
     await page.getByRole('button', { name: 'Cerrar' }).first().click()
+    }
     if (errors.length) console.log(label, theme, 'ERRORES:', errors.slice(0, 3))
     await context.close()
   }

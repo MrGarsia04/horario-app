@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`card ${className}`}>{children}</div>
+export function Card({ children, className = '', ...rest }: { children: ReactNode; className?: string } & Record<string, unknown>) {
+  return <div className={`card ${className}`} {...rest}>{children}</div>
 }
 
 export function Chip({ active, onClick, children, ...rest }: { active?: boolean; onClick?: () => void; children: ReactNode } & Record<string, unknown>) {
@@ -13,13 +13,14 @@ export function Chip({ active, onClick, children, ...rest }: { active?: boolean;
 }
 
 /** Pestañas tipo «segmentado»: pocas opciones, siempre visibles. */
-export function Tabs<T extends string>({ value, onChange, items, label }: { value: T; onChange: (v: T) => void; items: { id: T; label: string }[]; label: string }) {
+export function Tabs<T extends string>({ value, onChange, items, label }: { value: T; onChange: (v: T) => void; items: { id: T; label: string; tour?: string }[]; label: string }) {
   return (
     <div role="tablist" aria-label={label} className="flex rounded-xl border border-board-line bg-board-panel p-1">
       {items.map((it) => (
         <button
           key={it.id}
           role="tab"
+          data-tour={it.tour}
           aria-selected={value === it.id}
           onClick={() => onChange(it.id)}
           className={`min-h-[40px] flex-1 rounded-lg px-3 text-sm font-medium transition ${value === it.id ? 'bg-board-amber text-board-onaccent' : 'text-board-cream/70 hover:text-board-cream'}`}

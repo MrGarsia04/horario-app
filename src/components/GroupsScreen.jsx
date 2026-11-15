@@ -79,7 +79,7 @@ export default function GroupsScreen({ userId, onEnterGroup }) {
       )}
 
       <div className="mt-6 space-y-3">
-        <Card>
+        <Card data-tour="join-group">
           <button className="flex w-full items-center justify-between text-left text-sm font-medium" onClick={() => setJoinOpen((o) => !o)} aria-expanded={joinOpen}>
             Unirme a un grupo <span className="text-board-cream/50">{joinOpen ? '−' : '+'}</span>
           </button>

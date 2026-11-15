@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { defaultWeek } from '../lib/weeks'
+import { autoWindow, toLabel } from '../lib/schedule/availability'
 import { useGroupView } from '../hooks/useGroupView'
 import GroupHeatmap from '../components/GroupHeatmap'
 import AvailabilityMap from '../components/schedule/AvailabilityMap'
@@ -23,6 +24,9 @@ export default function GrupoPage() {
   if (v.modelLoading || v.membersLoading) return <p className="text-sm text-board-cream/50">Cargando…</p>
 
   const selectedSchedule = v.scheduleMembers.filter((m) => m.name === selected)
+  // El rango del mapa se calcula solo a partir de los horarios reales (ya no hay ajuste de grupo)
+  const win = autoWindow(v.scheduleMembers, week, codigo)
+  const mapConfig = { days: win.days, startTime: toLabel(win.startMin), endTime: toLabel(win.endMin) }
 
   return (
     <div>
@@ -46,9 +50,9 @@ export default function GrupoPage() {
           {v.scheduleLoading ? (
             <p className="text-sm text-board-cream/50">Cargando horarios…</p>
           ) : selected ? (
-            <AvailabilityMap single config={v.groupConfig} members={selectedSchedule} weekStart={week} groupCode={codigo} myUserId={v.user.id} highlightDayKey={v.birthdayDayKey} />
+            <AvailabilityMap single config={mapConfig} members={selectedSchedule} weekStart={week} groupCode={codigo} myUserId={v.user.id} highlightDayKey={v.birthdayDayKey} />
           ) : (
-            <AvailabilityMap config={v.groupConfig} members={v.scheduleMembers} weekStart={week} groupCode={codigo} myUserId={v.user.id} highlightDayKey={v.birthdayDayKey} />
+            <AvailabilityMap config={mapConfig} members={v.scheduleMembers} weekStart={week} groupCode={codigo} myUserId={v.user.id} highlightDayKey={v.birthdayDayKey} />
           )}
         </div>
       ) : (

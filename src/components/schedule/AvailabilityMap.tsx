@@ -42,7 +42,7 @@ export default function AvailabilityMap({ config, members, weekStart, groupCode,
   const nm = (id: string) => `${nameById[id]}${id === myUserId ? ' (tú)' : ''}`
 
   return (
-    <div>
+    <div data-tour="map">
       <div className="mb-3 flex flex-wrap items-center gap-2" role="group" aria-label="Opciones del mapa">
         <Chip active={step === 60} onClick={() => setStep(60)}>1 hora</Chip>
         <Chip active={step === 30} onClick={() => setStep(30)}>30 min</Chip>

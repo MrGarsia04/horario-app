@@ -300,3 +300,32 @@ export function cellAvailability(
     return { day, date, cells }
   })
 }
+
+
+// ---------- ventana visible automática ----------
+/** Franja social por defecto para proponer planes: todos los días, de 9:00 a 22:00. */
+export const SOCIAL_WINDOW: ViewWindow = { days: [...DAY_KEYS], startMin: 9 * 60, endMin: 22 * 60 }
+
+/**
+ * Ventana del mapa de disponibilidad calculada a partir de los horarios reales (ya no la fija nadie):
+ * lunes a viernes siempre, y sábado/domingo solo si alguien tiene algo; de 8:00 a 20:00 como mínimo,
+ * ampliada hasta una hora antes de la primera y una después de la última actividad de cualquiera (entre las 6:00 y las 24:00).
+ */
+export function autoWindow(members: MemberSchedule[], weekStart: string, groupCode: string | null): ViewWindow {
+  let min = Infinity
+  let max = 0
+  const used = new Set<DayKey>()
+  for (const day of DAY_KEYS) {
+    const date = getDateForDay(weekStart, day)
+    for (const m of members) {
+      for (const iv of busyIntervalsForDate(m, date, groupCode)) {
+        min = Math.min(min, iv.start)
+        max = Math.max(max, iv.end)
+        used.add(day)
+      }
+    }
+  }
+  const start = Math.max(6 * 60, Math.min(8 * 60, Number.isFinite(min) ? Math.floor(min / 60) * 60 - 60 : 8 * 60))
+  const end = Math.min(24 * 60, Math.max(20 * 60, max > 0 ? Math.ceil(max / 60) * 60 + 60 : 20 * 60))
+  return { days: DAY_KEYS.filter((d, i) => i < 5 || used.has(d)), startMin: start, endMin: end }
+}

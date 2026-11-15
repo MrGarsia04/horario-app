@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
 
@@ -19,9 +19,13 @@ const CLASS: Record<Variant, string> = {
   danger: 'btn-danger',
 }
 
-export default function Button({ variant = 'primary', small, block, loading, icon, className = '', children, disabled, type = 'button', ...rest }: Props) {
+const Button = forwardRef<HTMLButtonElement, Props>(function Button(
+  { variant = 'primary', small, block, loading, icon, className = '', children, disabled, type = 'button', ...rest },
+  ref
+) {
   return (
     <button
+      ref={ref}
       type={type}
       disabled={disabled || loading}
       className={`${CLASS[variant]} ${small ? 'btn-sm' : ''} ${block ? 'w-full' : ''} ${className}`}
@@ -31,4 +35,6 @@ export default function Button({ variant = 'primary', small, block, loading, ico
       {loading ? 'Un momento…' : children}
     </button>
   )
-}
+})
+
+export default Button

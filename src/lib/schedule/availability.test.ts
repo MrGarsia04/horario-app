@@ -332,3 +332,37 @@ describe('cellAvailability (franjas)', () => {
     expect(mon.cells[0].partial[0]).toMatchObject({ userId: 'L', freeMin: 15 })
   })
 })
+
+// ---------- Ventana automática ----------
+import { autoWindow, SOCIAL_WINDOW } from './availability'
+
+describe('autoWindow', () => {
+  it('sin horarios: lunes a viernes de 8:00 a 20:00', () => {
+    expect(autoWindow([member('A')], W1, null)).toEqual({ days: ['mon', 'tue', 'wed', 'thu', 'fri'], startMin: 480, endMin: 1200 })
+  })
+  it('se amplía con 1 h de margen sobre el horario de cualquiera (redondeado a horas)', () => {
+    const m = member('A', { blocks: [block({ user_id: 'A', day: 'tue', start_min: 7 * 60 + 15, end_min: 21 * 60 + 30 })] })
+    const w = autoWindow([m], W1, null)
+    expect(w.startMin).toBe(6 * 60) // 7:15 → 7:00 − 1 h
+    expect(w.endMin).toBe(23 * 60) // 21:30 → 22:00 + 1 h
+  })
+  it('no baja de las 6:00 ni sube de las 24:00', () => {
+    const m = member('A', { blocks: [block({ user_id: 'A', start_min: 120, end_min: 1440 })] })
+    const w = autoWindow([m], W1, null)
+    expect(w.startMin).toBe(360)
+    expect(w.endMin).toBe(1440)
+  })
+  it('incluye sábado/domingo solo si alguien tiene algo', () => {
+    const m = member('A', { blocks: [block({ user_id: 'A', day: 'sat', start_min: 600, end_min: 700 })] })
+    expect(autoWindow([m], W1, null).days).toEqual(['mon', 'tue', 'wed', 'thu', 'fri', 'sat'])
+  })
+  it('usa lo que cuenta ESA semana (capas quincenales, apagadas…)', () => {
+    const m = member('A', { templates: [layer({ id: 'q', every_n_weeks: 2, anchor_week: W1 })], blocks: [block({ template_id: 'q', user_id: 'A', day: 'sat', start_min: 600, end_min: 700 })] })
+    expect(autoWindow([m], W1, null).days).toContain('sat')
+    expect(autoWindow([m], W2, null).days).not.toContain('sat')
+  })
+  it('la ventana social es de 9:00 a 22:00 todos los días', () => {
+    expect(SOCIAL_WINDOW.days).toHaveLength(7)
+    expect([SOCIAL_WINDOW.startMin, SOCIAL_WINDOW.endMin]).toEqual([540, 1320])
+  })
+})

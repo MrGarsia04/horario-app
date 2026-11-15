@@ -3,7 +3,10 @@ import { Outlet, NavLink, useMatch, useNavigate, useLocation } from 'react-route
 import { useAuth, ACTIVE_GROUP_KEY } from '../context/AuthContext'
 import { useMyGroups } from '../hooks/useGroups'
 import SettingsSheet from './SettingsSheet'
-import Onboarding, { tutorialSeen } from './Onboarding'
+import Tour from './Tour'
+import { tourSeen } from './tourSteps'
+import ContactEmailCard from '../components/ContactEmailCard'
+import Sheet from '../ui/Sheet'
 import { IconCalendar, IconChevron, IconGear, IconSpark, IconUser, IconUsers } from '../ui/icons'
 
 function readActive(): string | null {
@@ -15,7 +18,7 @@ function readActive(): string | null {
 }
 
 export default function AppShell() {
-  const { user } = useAuth()
+  const { user, needsEmail, skipEmail } = useAuth()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const match = useMatch('/g/:codigo/*')
@@ -24,7 +27,7 @@ export default function AppShell() {
   const code = fromUrl ?? readActive()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [tutorial, setTutorial] = useState(() => !tutorialSeen())
+  const [tour, setTour] = useState(() => !tourSeen())
 
   useEffect(() => {
     if (fromUrl) {
@@ -90,7 +93,7 @@ export default function AppShell() {
                 </>
               )}
             </div>
-            <button onClick={() => setSettingsOpen(true)} className="btn-ghost !px-3" aria-label="Ajustes">
+            <button onClick={() => setSettingsOpen(true)} className="btn-ghost !px-3" aria-label="Ajustes" data-tour="settings">
               <IconGear className="h-6 w-6" />
             </button>
           </div>
@@ -103,8 +106,12 @@ export default function AppShell() {
         </main>
       </div>
 
-      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} groupCode={code} onShowTutorial={() => setTutorial(true)} />
-      {tutorial && <Onboarding onClose={() => setTutorial(false)} />}
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} groupCode={code} onShowTutorial={() => setTour(true)} />
+      {tour && <Tour groupCode={code} onClose={() => setTour(false)} />}
+      {/* El correo de contacto se ofrece DESPUÉS del recorrido, para que no choquen */}
+      <Sheet open={needsEmail && !tour} onClose={skipEmail} title="¿Quieres añadir tu correo?">
+        <div className="pb-4"><ContactEmailCard onDone={skipEmail} onSkip={skipEmail} title="Tu correo (opcional)" /></div>
+      </Sheet>
     </div>
   )
 }

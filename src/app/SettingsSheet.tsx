@@ -52,13 +52,16 @@ export default function SettingsSheet({ open, onClose, groupCode, onShowTutorial
       {groupCode && isAdmin && (
         <Section title="Administrar el grupo">
           <InviteBox groupCode={groupCode} />
-          <Button variant="secondary" block onClick={() => { onClose(); navigate(`/g/${groupCode}/config`) }}>Ventana visible del grupo</Button>
+          {model.data !== true && (
+            // Solo el modelo antiguo (sin la migración 0005) sigue necesitando fijar días y horas de la rejilla común
+            <Button variant="secondary" block onClick={() => { onClose(); navigate(`/g/${groupCode}/config`) }}>Días y horas de la rejilla del grupo</Button>
+          )}
         </Section>
       )}
 
       <Section title="Ayuda y app">
         <div className="flex flex-col gap-2">
-          <Button variant="secondary" block onClick={() => { onClose(); onShowTutorial() }}>Ver el tutorial otra vez</Button>
+          <Button variant="secondary" block onClick={() => { onClose(); onShowTutorial() }}>Ver el recorrido otra vez</Button>
           <div className="flex justify-center"><InstallButton /></div>
         </div>
       </Section>

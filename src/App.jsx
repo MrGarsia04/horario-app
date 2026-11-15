@@ -2,7 +2,6 @@ import { lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth, ACTIVE_GROUP_KEY } from './context/AuthContext'
 import AuthScreen from './components/AuthScreen'
-import EmailPromptScreen from './components/EmailPromptScreen'
 import AppShell from './app/AppShell'
 
 // Cada pantalla se descarga solo cuando se visita (carga inicial más ligera).
@@ -16,11 +15,10 @@ const EventsPage = lazy(() => import('./pages/EventsPage'))
 // Sin sesión se muestra el login en la misma URL (así los enlaces profundos
 // /g/abc siguen funcionando después de iniciar sesión).
 function RequireAuth({ children }) {
-  const { user, loading, needsEmail, skipEmail } = useAuth()
+  const { user, loading } = useAuth()
   if (loading) return <p className="min-h-screen flex items-center justify-center text-sm text-board-cream/50">Cargando…</p>
   if (!user) return <AuthScreen />
-  // Tras iniciar sesión, si no hay email de contacto se ofrece añadirlo («Más tarde» lo pospone).
-  if (needsEmail) return <EmailPromptScreen onSkip={skipEmail} />
+  // El correo de contacto se ofrece dentro de la app (AppShell), después del recorrido de bienvenida.
   return children
 }
 

@@ -118,7 +118,7 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
         label="Secciones de mi horario"
         value={tab}
         onChange={setTab}
-        items={[{ id: 'semana', label: 'Mi semana' }, { id: 'capas', label: `Capas (${templates.length})` }]}
+        items={[{ id: 'semana', label: 'Mi semana' }, { id: 'capas', label: `Capas (${templates.length})`, tour: 'tab-capas' }]}
       />
 
       {tab === 'capas' ? (
@@ -142,7 +142,7 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
         <>
           <div className="mt-4 flex items-start justify-between gap-3">
             <div className="flex-1"><WeekNavigator weekStart={weekStart} onChange={onWeekChange} statusText={null} /></div>
-            <Button icon={<IconPlus className="h-4 w-4" />} onClick={() => setDraft({ day: todayIdx >= 0 && todayIdx <= 4 ? DAYS[todayIdx].key : 'mon', start_min: 9 * 60, end_min: 10 * 60 })}>Bloque</Button>
+            <Button data-tour="add-block" icon={<IconPlus className="h-4 w-4" />} onClick={() => setDraft({ day: todayIdx >= 0 && todayIdx <= 4 ? DAYS[todayIdx].key : 'mon', start_min: 9 * 60, end_min: 10 * 60 })}>Bloque</Button>
           </div>
 
           {templates.length > 1 && (
