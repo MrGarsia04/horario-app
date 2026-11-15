@@ -152,3 +152,21 @@ export function useGroupSchedules(
     },
   })
 }
+
+/** Mi visibilidad en un grupo ('busy' | 'full'). */
+export function useMyVisibility(groupCode: string | null, userId: string) {
+  return useQuery<Visibility>({
+    queryKey: ['group', groupCode, 'my-visibility', userId],
+    enabled: Boolean(groupCode),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('group_memberships')
+        .select('schedule_visibility')
+        .eq('group_code', groupCode)
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (error) return 'busy' // modelo antiguo (sin la columna)
+      return (data?.schedule_visibility ?? 'busy') as Visibility
+    },
+  })
+}

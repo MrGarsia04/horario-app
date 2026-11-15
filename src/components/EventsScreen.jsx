@@ -36,12 +36,14 @@ export default function EventsScreen({ userId, onBack, initialPlan }) {
   const isFormOpen = showForm || Boolean(editingEvent)
 
   return (
-    <div className="min-h-screen max-w-md mx-auto px-4 py-10">
-      <div className="flex items-center justify-between mb-8">
+    <div className="max-w-md mx-auto">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold">Planes</h1>
-        <button onClick={onBack} className="text-sm text-board-cream/50 hover:text-board-cream">
-          Volver
-        </button>
+        {onBack && (
+          <button onClick={onBack} className="text-sm text-board-cream/50 hover:text-board-cream">
+            Volver
+          </button>
+        )}
       </div>
 
       {isFormOpen ? (

@@ -1,11 +1,17 @@
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { lazy } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth, ACTIVE_GROUP_KEY } from './context/AuthContext'
 import AuthScreen from './components/AuthScreen'
 import EmailPromptScreen from './components/EmailPromptScreen'
-import GroupsPage from './pages/GroupsPage'
-import GroupPage from './pages/GroupPage'
-import ProfilePage from './pages/ProfilePage'
-import EventsPage from './pages/EventsPage'
+import AppShell from './app/AppShell'
+
+// Cada pantalla se descarga solo cuando se visita (carga inicial más ligera).
+const GroupsPage = lazy(() => import('./pages/GroupsPage'))
+const HorarioPage = lazy(() => import('./pages/HorarioPage'))
+const GrupoPage = lazy(() => import('./pages/GrupoPage'))
+const GroupConfigPage = lazy(() => import('./pages/GroupConfigPage'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const EventsPage = lazy(() => import('./pages/EventsPage'))
 
 // Sin sesión se muestra el login en la misma URL (así los enlaces profundos
 // /g/abc siguen funcionando después de iniciar sesión).
@@ -20,14 +26,13 @@ function RequireAuth({ children }) {
 
 // "/" reabre el último grupo usado (como hacía la app antes de tener rutas).
 function Home() {
-
-  const saved = localStorage.getItem(ACTIVE_GROUP_KEY)
+  let saved = null
+  try {
+    saved = localStorage.getItem(ACTIVE_GROUP_KEY)
+  } catch {
+    /* sin almacenamiento */
+  }
   return <Navigate to={saved ? `/g/${encodeURIComponent(saved)}` : '/grupos'} replace />
-}
-
-function NotFound() {
-  const location = useLocation()
-  return <Navigate to="/grupos" replace state={{ from: location.pathname }} />
 }
 
 export default function App() {
@@ -36,12 +41,15 @@ export default function App() {
       <RequireAuth>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/grupos" element={<GroupsPage />} />
-          <Route path="/g/:codigo" element={<GroupPage />} />
-          <Route path="/g/:codigo/config" element={<GroupPage settings />} />
-          <Route path="/perfil" element={<ProfilePage />} />
-          <Route path="/planes" element={<EventsPage />} />
-          <Route path="*" element={<NotFound />} />
+          <Route element={<AppShell />}>
+            <Route path="/grupos" element={<GroupsPage />} />
+            <Route path="/g/:codigo" element={<HorarioPage />} />
+            <Route path="/g/:codigo/grupo" element={<GrupoPage />} />
+            <Route path="/g/:codigo/config" element={<GroupConfigPage />} />
+            <Route path="/perfil" element={<ProfilePage />} />
+            <Route path="/planes" element={<EventsPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/grupos" replace />} />
         </Routes>
       </RequireAuth>
     </AuthProvider>

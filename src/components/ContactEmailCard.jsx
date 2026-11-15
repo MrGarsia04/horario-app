@@ -4,7 +4,7 @@ import { saveContactEmail } from '../lib/auth'
 
 // Formulario del email de contacto (opcional). `onDone` se llama tras guardar;
 // `onSkip` (si se pasa) añade el botón «Más tarde».
-export default function ContactEmailCard({ onDone, onSkip, title = 'Añade tu correo' }) {
+export default function ContactEmailCard({ onDone = undefined, onSkip = undefined, title = 'Añade tu correo' }) {
   const { user, contactEmail, contactEmailChanged } = useAuth()
   const [email, setEmail] = useState(contactEmail ?? '')
   const [error, setError] = useState('')
