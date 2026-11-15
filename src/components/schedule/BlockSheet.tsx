@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toLabel, toMinutes } from '../../lib/schedule/availability'
-import type { Block, DayKey, Repeat } from '../../lib/schedule/types'
+import type { Block, DayKey, Repeat, Template } from '../../lib/schedule/types'
 import Sheet from '../../ui/Sheet'
 import Button from '../../ui/Button'
 import { Chip, Disclosure } from '../../ui/misc'
@@ -16,6 +16,7 @@ export interface BlockDraft {
   location?: string | null
   repeat?: Repeat
   group_code?: string | null
+  template_id?: string
   valid_from?: string | null
   valid_to?: string | null
 }
@@ -23,35 +24,31 @@ export interface BlockDraft {
 interface Props {
   draft: BlockDraft
   groupCode: string | null
-  /** Paridad de la semana que se está viendo: sirve para explicar «cada 2 semanas» sin jerga */
-  thisWeekParity: 'a' | 'b'
+  /** Capas entre las que se puede elegir y la preseleccionada */
+  layers: Template[]
+  layerId: string
   saving: boolean
-  onSave: (v: Omit<Block, 'id' | 'user_id' | 'template_id'> & { id?: string }) => void
+  onSave: (v: Omit<Block, 'id' | 'user_id'> & { id?: string }) => void
   onDelete?: () => void
   onCopyTo?: (days: DayKey[]) => void
   onClose: () => void
 }
 
-type RepeatChoice = 'weekly' | 'this' | 'next'
-
-export default function BlockSheet({ draft, groupCode, thisWeekParity, saving, onSave, onDelete, onCopyTo, onClose }: Props) {
+export default function BlockSheet({ draft, groupCode, layers, layerId: initialLayer, saving, onSave, onDelete, onCopyTo, onClose }: Props) {
   const [title, setTitle] = useState(draft.title ?? '')
   const [day, setDay] = useState<DayKey>(draft.day)
   const [start, setStart] = useState(toLabel(draft.start_min))
   const [end, setEnd] = useState(toLabel(draft.end_min))
-  const [color, setColor] = useState(draft.color ?? COLORS[0])
+  const [layerId, setLayerId] = useState(initialLayer)
+  // null = hereda el color de la capa
+  const [color, setColor] = useState<string | null>(draft.color ?? null)
+  const layer = layers.find((l) => l.id === layerId)
   const [location, setLocation] = useState(draft.location ?? '')
-  const [repeat, setRepeat] = useState<RepeatChoice>(
-    !draft.repeat || draft.repeat === 'weekly' ? 'weekly' : draft.repeat === `biweekly_${thisWeekParity}` ? 'this' : 'next'
-  )
   const [scope, setScope] = useState<'all' | 'group'>(draft.group_code ? 'group' : 'all')
   const [validFrom, setValidFrom] = useState(draft.valid_from ?? '')
   const [validTo, setValidTo] = useState(draft.valid_to ?? '')
   const [copyDays, setCopyDays] = useState<DayKey[]>([])
   const [error, setError] = useState('')
-
-  const other = thisWeekParity === 'a' ? 'b' : 'a'
-  const repeatValue = (): Repeat => (repeat === 'weekly' ? 'weekly' : repeat === 'this' ? `biweekly_${thisWeekParity}` : `biweekly_${other}`)
 
   function save() {
     const s = toMinutes(start)
@@ -61,7 +58,7 @@ export default function BlockSheet({ draft, groupCode, thisWeekParity, saving, o
     setError('')
     onSave({
       id: draft.id, title: title.trim() || null, color, location: location.trim() || null, day,
-      start_min: s, end_min: en, repeat: repeatValue(), group_code: scope === 'group' ? groupCode : null,
+      template_id: layerId, start_min: s, end_min: en, repeat: draft.repeat ?? 'weekly', group_code: scope === 'group' ? groupCode : null,
       valid_from: validFrom || null, valid_to: validTo || null,
     })
   }
@@ -81,6 +78,19 @@ export default function BlockSheet({ draft, groupCode, thisWeekParity, saving, o
       <div className="space-y-4">
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Nombre (asignatura, turno…)" maxLength={80} className="field" aria-label="Nombre" autoFocus={!draft.id} />
 
+        {layers.length > 1 && (
+          <div>
+            <p className="mb-1.5 text-xs text-board-cream/60">Capa</p>
+            <div className="flex flex-wrap gap-1.5">
+              {layers.map((l) => (
+                <Chip key={l.id} active={layerId === l.id} onClick={() => setLayerId(l.id)}>
+                  <span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: l.color ?? COLORS[0] }} />{l.name}
+                </Chip>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
           <p className="mb-1.5 text-xs text-board-cream/60">Día</p>
           <div className="flex flex-wrap gap-1.5">
@@ -95,25 +105,21 @@ export default function BlockSheet({ draft, groupCode, thisWeekParity, saving, o
           <label className="text-xs text-board-cream/60">Hasta<input type="time" step={900} value={end} onChange={(e) => setEnd(e.target.value)} className="field mt-1" /></label>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5" role="radiogroup" aria-label="Color">
-          {COLORS.map((c) => (
-            <button key={c} type="button" role="radio" aria-checked={color === c} aria-label={`Color ${c}`} onClick={() => setColor(c)} style={{ backgroundColor: c }} className={`h-8 w-8 rounded-full ${color === c ? 'ring-2 ring-board-cream ring-offset-2 ring-offset-board-bg' : ''}`} />
-          ))}
+        <div>
+          <p className="mb-1.5 text-xs text-board-cream/60">Color</p>
+          <div className="flex flex-wrap items-center gap-2.5" role="radiogroup" aria-label="Color">
+            <button type="button" role="radio" aria-checked={color === null} onClick={() => setColor(null)} className={`flex h-8 items-center gap-1.5 rounded-full border border-board-line px-2.5 text-xs ${color === null ? 'ring-2 ring-board-cream ring-offset-2 ring-offset-board-bg' : ''}`}>
+              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: layer?.color ?? COLORS[0] }} />De la capa
+            </button>
+            {COLORS.map((c) => (
+              <button key={c} type="button" role="radio" aria-checked={color === c} aria-label={`Color ${c}`} onClick={() => setColor(c)} style={{ backgroundColor: c }} className={`h-8 w-8 rounded-full ${color === c ? 'ring-2 ring-board-cream ring-offset-2 ring-offset-board-bg' : ''}`} />
+            ))}
+          </div>
         </div>
 
         {error && <p className="text-sm text-board-danger">{error}</p>}
 
         <Disclosure title="Más opciones">
-          <div>
-            <p className="mb-1.5 text-xs text-board-cream/60">¿Cada cuánto se repite?</p>
-            <div className="flex flex-col gap-1.5">
-              <Chip active={repeat === 'weekly'} onClick={() => setRepeat('weekly')}>Todas las semanas</Chip>
-              <Chip active={repeat === 'this'} onClick={() => setRepeat('this')}>Solo cada 2 semanas, empezando esta semana</Chip>
-              <Chip active={repeat === 'next'} onClick={() => setRepeat('next')}>Solo cada 2 semanas, empezando la semana que viene</Chip>
-            </div>
-            <p className="mt-1.5 text-xs text-board-cream/50">«Esta semana» es la que estás viendo en el horario.</p>
-          </div>
-
           <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Lugar (opcional)" maxLength={80} className="field" aria-label="Lugar" />
 
           <div className="grid grid-cols-2 gap-3">

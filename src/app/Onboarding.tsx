@@ -6,7 +6,7 @@ export const TUTORIAL_KEY = 'opf-tutorial-v1'
 
 const SLIDES = [
   { icon: IconSpark, title: 'Bienvenido a «Orden, por favor»', text: 'Tu horario y el de tus amigos en un solo sitio, para saber cuándo coincidís libres sin mil mensajes.' },
-  { icon: IconCalendar, title: 'Crea tu horario', text: 'En «Horario» toca un hueco para añadir una clase o un turno. Puedes repetirlo cada semana o cada dos, y tener varias plantillas (clases, exámenes…).' },
+  { icon: IconCalendar, title: 'Crea tu horario', text: 'En «Horario» toca un hueco para añadir una clase o un turno. Organízalo por capas (clases, prácticas, trabajo…) y elige cada cuánto se repite cada una: todas las semanas, cada 2, cada 3…' },
   { icon: IconUsers, title: 'Únete a un grupo', text: 'Pídele el código de invitación a quien administra el grupo y pégalo en «Mis grupos». También puedes crear uno nuevo e invitar a tu gente.' },
   { icon: IconSpark, title: 'Mira cuándo coincidís', text: 'En «Grupo» verás quién está libre y los mejores momentos para quedar. Con un toque creas el plan.' },
 ]

@@ -7,23 +7,30 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 const BASE = process.env.BASE ?? 'http://localhost:5190'
-const OUT = new URL('../capturas-fase-2/', import.meta.url).pathname
+const OUT = new URL(`../${process.env.CAPTURAS_DIR ?? 'capturas-fase-2'}/`, import.meta.url).pathname
+const SOLO_MOVIL = process.env.SOLO_MOVIL === '1'
 mkdirSync(OUT, { recursive: true })
 const exe = process.env.CHROME ?? join(homedir(), '.cache/ms-playwright/chromium-1248/chrome-linux64/chrome')
 
 const ME = '00000000-0000-0000-0000-000000000001'
 const others = { '00000000-0000-0000-0000-000000000002': 'Ana', '00000000-0000-0000-0000-000000000003': 'Beto', '00000000-0000-0000-0000-000000000004': 'Carla' }
 const names = { [ME]: 'Iker', ...others }
-const T = (u) => ({ id: 't-' + u.slice(-1), user_id: u, name: 'Clases', is_active: true, active_from: null, active_to: null, created_at: '2026-01-01' })
+const T = (u) => ({ id: 't-' + u.slice(-1), user_id: u, name: 'Clases', is_active: true, active_from: null, active_to: null, color: '#4C7C7C', every_n_weeks: 1, anchor_week: null, sort_order: 0, created_at: '2026-01-01' })
+// Capas extra de Iker: una quincenal y otra desactivada
+const monday = (() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString().slice(0, 10) })()
+const extraLayers = [
+  { ...T(ME), id: 't-q', name: 'Prácticas', color: '#C0504D', every_n_weeks: 2, anchor_week: monday, created_at: '2026-01-02' },
+  { ...T(ME), id: 't-off', name: 'Verano', color: '#4CAF7A', is_active: false, created_at: '2026-01-03' },
+]
 const B = (u, i, day, s, e, title, color, repeat = 'weekly') => ({ id: `b${u.slice(-1)}${i}`, template_id: 't-' + u.slice(-1), user_id: u, group_code: null, title, color, location: null, day, start_min: s, end_min: e, repeat, valid_from: null, valid_to: null })
 const blocks = [
-  B(ME, 1, 'mon', 540, 630, 'Cálculo', '#4C7C7C'), B(ME, 2, 'mon', 720, 810, 'Física', '#5B8DEF'), B(ME, 3, 'tue', 600, 720, 'Prácticas', '#C0504D', 'biweekly_a'),
-  B(ME, 4, 'wed', 540, 660, 'Álgebra', '#8E6BBF'), B(ME, 5, 'thu', 780, 870, 'Inglés', '#4CAF7A'), B(ME, 6, 'fri', 600, 690, 'Lab', '#E8A33D'),
+  B(ME, 1, 'mon', 540, 630, 'Cálculo', '#4C7C7C'), B(ME, 2, 'mon', 720, 810, 'Física', '#5B8DEF'), { ...B(ME, 3, 'tue', 600, 720, 'Prácticas', null), template_id: 't-q' },
+  B(ME, 4, 'wed', 540, 660, 'Álgebra', null), B(ME, 5, 'thu', 780, 870, 'Inglés', '#4CAF7A'), { ...B(ME, 6, 'fri', 600, 690, 'Lab', null), template_id: 't-q' }, { ...B(ME, 7, 'mon', 900, 1020, 'Playa', null), template_id: 't-off' },
   B('00000000-0000-0000-0000-000000000002', 1, 'mon', 570, 660, null, null), B('00000000-0000-0000-0000-000000000002', 2, 'tue', 540, 780, null, null),
   B('00000000-0000-0000-0000-000000000003', 1, 'mon', 600, 720, null, null), B('00000000-0000-0000-0000-000000000003', 2, 'wed', 540, 660, null, null), B('00000000-0000-0000-0000-000000000003', 3, 'thu', 840, 960, null, null),
   B('00000000-0000-0000-0000-000000000004', 1, 'tue', 600, 690, null, null), B('00000000-0000-0000-0000-000000000004', 2, 'fri', 540, 720, null, null),
 ]
-const templates = Object.keys(names).map(T)
+const templates = [...Object.keys(names).map(T), ...extraLayers]
 const config = { days: ['mon', 'tue', 'wed', 'thu', 'fri'], startTime: '09:00', endTime: '19:00', slotMinutes: 90, breaks: [] }
 
 const rows = {
@@ -79,7 +86,8 @@ const themes = ['panel', 'rosa']
 
 for (const [label, width, height, dpr] of sizes) {
   for (const theme of themes) {
-    if (label !== 'movil-390x844' && theme === 'rosa') continue // rosa solo en el móvil principal
+    if (SOLO_MOVIL && label !== 'movil-390x844') continue
+  if (label !== 'movil-390x844' && theme === 'rosa') continue // rosa solo en el móvil principal
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: dpr === 3 ? 2 : 1, hasTouch: dpr === 3, isMobile: dpr === 3 })
     await mockSupabase(context)
     await context.addInitScript(([s, t]) => {
@@ -99,9 +107,13 @@ for (const [label, width, height, dpr] of sizes) {
     await page.waitForTimeout(300)
     await shot('2-bloque-nuevo')
     await page.getByRole('button', { name: 'Cerrar' }).click()
-    await page.getByRole('tab', { name: 'Plantillas y fechas' }).click()
+    await page.getByRole('tab', { name: /^Capas/ }).click()
     await page.waitForTimeout(300)
-    await shot('3-plantillas')
+    await shot('3-capas')
+    await page.evaluate(() => window.scrollTo(0, 700))
+    await page.waitForTimeout(200)
+    await shot('3b-capas-abajo')
+    await page.evaluate(() => window.scrollTo(0, 0))
     await goto('/g/informaticos/grupo')
     await shot('4-grupo')
     await page.locator('button[aria-label*="libres"]').nth(30).click()

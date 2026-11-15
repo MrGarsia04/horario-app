@@ -4,12 +4,12 @@ import { getDateForDay, todayISO } from '../../lib/weeks'
 import type { Block, DayKey, Template } from '../../lib/schedule/types'
 import { useMySchedule, useScheduleActions } from '../../hooks/useSchedules'
 import BlockSheet, { type BlockDraft } from './BlockSheet'
-import PlantillasTab from './PlantillasTab'
+import CapasTab from './CapasTab'
 import WeekNavigator from '../WeekNavigator'
 import Button from '../../ui/Button'
-import { Tabs } from '../../ui/misc'
+import { Chip, Tabs } from '../../ui/misc'
 import { IconPlus, IconLeft, IconRight, IconRepeat } from '../../ui/icons'
-import { DAYS, SNAP, snap } from './constants'
+import { COLORS, DAYS, SNAP, snap } from './constants'
 
 const PX_PER_MIN = 0.8 // 48 px por hora
 const DEFAULT_FROM = 7 * 60
@@ -37,7 +37,8 @@ function useDayCount() {
 export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekChange }: Props) {
   const mine = useMySchedule(userId)
   const actions = useScheduleActions(userId, groupCode)
-  const [tab, setTab] = useState<'semana' | 'plantillas'>('semana')
+  const [tab, setTab] = useState<'semana' | 'capas'>('semana')
+  const [onlyLayer, setOnlyLayer] = useState<string | null>(null)
   const [draft, setDraft] = useState<BlockDraft | null>(null)
   const [error, setError] = useState('')
   const creatingDefault = useRef(false)
@@ -56,7 +57,7 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
   useEffect(() => {
     if (!mine.data || templates.length > 0 || creatingDefault.current) return
     creatingDefault.current = true
-    actions.createTemplate.mutateAsync({ name: 'Mi horario' }).catch((e) => setError(e.message))
+    actions.createTemplate.mutateAsync({ name: 'Mi horario', color: COLORS[0] }).catch((e) => setError(e.message))
   }, [mine.data, templates.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // En móvil se abre en el día de hoy si la semana visible es la actual.
@@ -74,16 +75,19 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
     for (const d of DAYS) {
       const date = getDateForDay(weekStart, d.key)
       const ids = new Set(activeTemplates(templates, date).map((t) => t.id))
-      out[d.key] = allBlocks.filter((b) => ids.has(b.template_id) && blockApplies(b, date, groupCode, parity))
+      out[d.key] = allBlocks.filter((b) => ids.has(b.template_id) && (!onlyLayer || b.template_id === onlyLayer) && blockApplies(b, date, groupCode, parity))
     }
     return out
-  }, [templates, allBlocks, weekStart, groupCode, parity])
+  }, [templates, allBlocks, weekStart, groupCode, parity, onlyLayer])
 
   const shown = visible.flatMap((d) => blocksByDay[d.key])
   const from = Math.min(DEFAULT_FROM, Math.floor(Math.min(...shown.map((b) => b.start_min), DEFAULT_FROM) / 60) * 60)
   const to = Math.max(DEFAULT_TO, Math.ceil(Math.max(...shown.map((b) => b.end_min), DEFAULT_TO) / 60) * 60)
   const height = (to - from) * PX_PER_MIN
-  const targetTemplate = templates.find((t) => t.is_active) ?? templates[0]
+  const lastUsed = (() => { try { return localStorage.getItem('opf-last-layer') } catch { return null } })()
+  const targetTemplate = templates.find((t) => t.id === lastUsed) ?? templates.find((t) => t.is_active) ?? templates[0]
+  const layerColor = (id: string) => templates.find((t) => t.id === id)?.color ?? COLORS[0]
+  const blockCount = allBlocks.reduce<Record<string, number>>((acc, b) => ({ ...acc, [b.template_id]: (acc[b.template_id] ?? 0) + 1 }), {})
 
   async function guard(fn: () => Promise<unknown>) {
     setError('')
@@ -94,12 +98,15 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
     }
   }
 
-  async function saveDraft(v: Omit<Block, 'id' | 'user_id' | 'template_id'> & { id?: string }) {
-    const existing = v.id ? allBlocks.find((b) => b.id === v.id) : null
-    const template_id = existing?.template_id ?? targetTemplate?.id
-    if (!template_id) return
+  async function saveDraft(v: Omit<Block, 'id' | 'user_id'> & { id?: string }) {
+    if (!v.template_id) return
+    try {
+      localStorage.setItem('opf-last-layer', v.template_id)
+    } catch {
+      /* sin almacenamiento */
+    }
     await guard(async () => {
-      await actions.saveBlock.mutateAsync({ ...v, template_id })
+      await actions.saveBlock.mutateAsync(v)
       setDraft(null)
     })
   }
@@ -117,7 +124,7 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
   async function duplicateTemplate(id: string) {
     const t = templates.find((x) => x.id === id)
     if (!t) return
-    const copy = (await actions.createTemplate.mutateAsync({ name: `${t.name} (copia)`, is_active: false })) as Template
+    const copy = (await actions.createTemplate.mutateAsync({ name: `${t.name} (copia)`.slice(0, 60), is_active: false, color: t.color ?? null, every_n_weeks: t.every_n_weeks ?? 1, anchor_week: t.anchor_week ?? null, active_from: t.active_from, active_to: t.active_to })) as Template
     const src = allBlocks.filter((b) => b.template_id === id)
     if (src.length) {
       await actions.insertBlocks.mutateAsync(src.map(({ id: _i, user_id: _u, template_id: _t, ...rest }) => ({ ...rest, template_id: copy.id })))
@@ -129,20 +136,22 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
 
   return (
     <div>
-      <Tabs<'semana' | 'plantillas'>
+      <Tabs<'semana' | 'capas'>
         label="Secciones de mi horario"
         value={tab}
         onChange={setTab}
-        items={[{ id: 'semana', label: 'Mi semana' }, { id: 'plantillas', label: 'Plantillas y fechas' }]}
+        items={[{ id: 'semana', label: 'Mi semana' }, { id: 'capas', label: `Capas (${templates.length})` }]}
       />
 
-      {tab === 'plantillas' ? (
+      {tab === 'capas' ? (
         <div className="mt-4">
-          <PlantillasTab
-            templates={templates}
+          <CapasTab
+            layers={templates}
+            blockCount={blockCount}
             exceptions={exceptions}
             groupCode={groupCode}
-            onCreate={async (name) => void (await actions.createTemplate.mutateAsync({ name }))}
+            weekStart={weekStart}
+            onCreate={async (name, every) => void (await actions.createTemplate.mutateAsync({ name, color: COLORS[templates.length % COLORS.length], every_n_weeks: every, anchor_week: every > 1 ? weekStart : null }))}
             onUpdate={async (id, patch) => void (await actions.updateTemplate.mutateAsync({ id, ...patch }))}
             onDelete={async (id) => void (await actions.deleteTemplate.mutateAsync(id))}
             onDuplicate={duplicateTemplate}
@@ -156,6 +165,18 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
             <div className="flex-1"><WeekNavigator weekStart={weekStart} onChange={onWeekChange} statusText={null} /></div>
             <Button icon={<IconPlus className="h-4 w-4" />} onClick={() => setDraft({ day: visible[0].key, start_min: 9 * 60, end_min: 10 * 60 })}>Bloque</Button>
           </div>
+
+          {templates.length > 1 && (
+            <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1" role="group" aria-label="Filtrar por capa">
+              <Chip active={onlyLayer === null} onClick={() => setOnlyLayer(null)}>Todas</Chip>
+              {templates.map((t) => (
+                <Chip key={t.id} active={onlyLayer === t.id} onClick={() => setOnlyLayer(onlyLayer === t.id ? null : t.id)}>
+                  <span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: t.color ?? COLORS[0], opacity: t.is_active ? 1 : 0.35 }} />
+                  <span className={t.is_active ? '' : 'line-through opacity-60'}>{t.name}</span>
+                </Chip>
+              ))}
+            </div>
+          )}
 
           <div className="card !p-0 overflow-hidden">
             <div className="flex select-none">
@@ -175,6 +196,7 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
                   date={getDateForDay(weekStart, d.key)}
                   isToday={getDateForDay(weekStart, d.key) === today}
                   blocks={blocksByDay[d.key]}
+                  layerColor={layerColor}
                   from={from}
                   to={to}
                   height={height}
@@ -200,7 +222,8 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
           key={draft.id ?? `${draft.day}-${draft.start_min}-${draft.end_min}`}
           draft={draft}
           groupCode={groupCode}
-          thisWeekParity={parity}
+          layers={templates}
+          layerId={draft.template_id ?? targetTemplate?.id ?? ''}
           saving={actions.saveBlock.isPending}
           onSave={saveDraft}
           onClose={() => setDraft(null)}
@@ -218,6 +241,7 @@ interface ColProps {
   date: string
   isToday: boolean
   blocks: Block[]
+  layerColor: (templateId: string) => string
   from: number
   to: number
   height: number
@@ -228,7 +252,7 @@ interface ColProps {
   onEdit: (b: Block) => void
 }
 
-function DayColumn({ dayKey, label, date, isToday, blocks, from, to, height, hasFree, leftArrow, rightArrow, onCreate, onEdit }: ColProps) {
+function DayColumn({ dayKey, label, date, isToday, blocks, layerColor, from, to, height, hasFree, leftArrow, rightArrow, onCreate, onEdit }: ColProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ a: number; b: number } | null>(null)
   const dragRef = useRef<{ a: number; b: number } | null>(null)
@@ -308,7 +332,7 @@ function DayColumn({ dayKey, label, date, isToday, blocks, from, to, height, has
             onPointerDown={(e) => e.stopPropagation()}
             onPointerUp={(e) => e.stopPropagation()}
             onClick={() => onEdit(b)}
-            style={{ top: (b.start_min - from) * PX_PER_MIN, height: Math.max((b.end_min - b.start_min) * PX_PER_MIN - 1, 16), backgroundColor: b.color ?? '#4C7C7C' }}
+            style={{ top: (b.start_min - from) * PX_PER_MIN, height: Math.max((b.end_min - b.start_min) * PX_PER_MIN - 1, 16), backgroundColor: b.color ?? layerColor(b.template_id) }}
             className="absolute inset-x-0.5 overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight text-white shadow-sm hover:brightness-110"
             aria-label={`${b.title ?? 'Bloque'} ${toLabel(b.start_min)}–${toLabel(b.end_min)}`}
           >
