@@ -7,66 +7,92 @@ const sb = vi.hoisted(() => ({
 }))
 vi.mock('./supabaseClient', () => ({ supabase: sb }))
 
-import { claimLegacyAccount } from './auth'
+import { signIn, signUp, saveContactEmail, INTERNAL_EMAIL_DOMAIN } from './auth'
 
-function profileIs(username) {
-  sb.from.mockReturnValue({
-    select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: username ? { username } : null }) }) }),
-  })
+// rpc simulado por nombre de función
+function rpcs(map) {
+  sb.rpc.mockImplementation(async (name) => ({ data: map[name] ?? null, error: null }))
 }
 
-beforeEach(() => {
-  vi.resetAllMocks()
-  globalThis.window = { location: { origin: 'http://localhost:5173' } }
+beforeEach(() => vi.resetAllMocks())
+
+describe('signIn', () => {
+  it('cuenta ya migrada: busca el email interno por usuario y entra con la contraseña', async () => {
+    rpcs({ login_alias: 'x@usuarios.horario-app.com' })
+    sb.auth.signInWithPassword.mockResolvedValue({ error: null })
+    expect(await signIn('Iker', 'secreta1')).toEqual({ data: true })
+    expect(sb.auth.signInWithPassword).toHaveBeenCalledWith({ email: 'x@usuarios.horario-app.com', password: 'secreta1' })
+  })
+  it('contraseña incorrecta: mensaje único', async () => {
+    rpcs({ login_alias: 'x@usuarios.horario-app.com' })
+    sb.auth.signInWithPassword.mockResolvedValue({ error: { message: 'Invalid login credentials' } })
+    expect((await signIn('Iker', 'mala')).error).toBe('Usuario o contraseña incorrectos.')
+  })
+  it('usuario inexistente: el mismo mensaje y no se crea nada', async () => {
+    rpcs({ login_alias: null, legacy_claim_valid: false })
+    expect((await signIn('nadie', 'x')).error).toBe('Usuario o contraseña incorrectos.')
+    expect(sb.auth.signUp).not.toHaveBeenCalled()
+  })
+  it('cuenta antigua con contraseña correcta: migra en silencio con la misma contraseña', async () => {
+    rpcs({ login_alias: null, legacy_claim_valid: true })
+    sb.auth.signUp.mockResolvedValue({ data: { session: {} }, error: null })
+    expect(await signIn('Iker', 'TempIker2026')).toEqual({ data: true })
+    const arg = sb.auth.signUp.mock.calls[0][0]
+    expect(arg.password).toBe('TempIker2026')
+    expect(arg.email.endsWith('@' + INTERNAL_EMAIL_DOMAIN)).toBe(true)
+    expect(arg.options.data.legacy_username).toBe('Iker')
+    expect(arg.options.data.legacy_hash).toMatch(/^[0-9a-f]{64}$/)
+  })
+  it('cuenta antigua con contraseña corta: pide una nueva y luego migra', async () => {
+    rpcs({ login_alias: null, legacy_claim_valid: true })
+    expect(await signIn('Iker', 'abc')).toEqual({ needNewPassword: true })
+    expect(sb.auth.signUp).not.toHaveBeenCalled()
+    sb.auth.signUp.mockResolvedValue({ data: { session: {} }, error: null })
+    expect(await signIn('Iker', 'abc', 'nueva1234')).toEqual({ data: true })
+    expect(sb.auth.signUp.mock.calls[0][0].password).toBe('nueva1234')
+  })
+  it('cuenta antigua con contraseña incorrecta: no migra', async () => {
+    rpcs({ login_alias: null, legacy_claim_valid: false })
+    expect((await signIn('Iker', 'otra')).error).toBeTruthy()
+    expect(sb.auth.signUp).not.toHaveBeenCalled()
+  })
 })
 
-describe('claimLegacyAccount', () => {
-  it('verifica la contraseña antigua ANTES de crear nada en Auth', async () => {
-    sb.rpc.mockResolvedValue({ data: false, error: null })
-    const r = await claimLegacyAccount('Iker', 'mala', 'a@b.com', 'nueva123')
-    expect(r.error).toMatch(/incorrectos/)
-    expect(sb.rpc).toHaveBeenCalledWith('legacy_claim_valid', expect.objectContaining({ p_username: 'Iker' }))
+describe('signUp', () => {
+  it('rechaza nombre en uso sin crear cuenta', async () => {
+    rpcs({ username_available: false })
+    expect((await signUp('Iker', 'secreta1')).error).toMatch(/ya está en uso/)
     expect(sb.auth.signUp).not.toHaveBeenCalled()
   })
-  it('si la función no existe, muestra el error y no crea la cuenta', async () => {
-    sb.rpc.mockResolvedValue({ data: null, error: { message: 'Could not find the function' } })
-    const r = await claimLegacyAccount('Iker', 'x', 'a@b.com', 'nueva123')
-    expect(r.error).toBeTruthy()
-    expect(sb.auth.signUp).not.toHaveBeenCalled()
-  })
-  it('camino feliz: signUp con los datos de reclamación', async () => {
-    sb.rpc.mockResolvedValue({ data: true, error: null })
+  it('crea la cuenta con email interno y el nombre en los metadatos', async () => {
+    rpcs({ username_available: true })
     sb.auth.signUp.mockResolvedValue({ data: { session: {} }, error: null })
-    const r = await claimLegacyAccount('Iker', 'vieja', 'a@b.com', 'nueva123')
-    expect(r).toEqual({ data: { needsConfirmation: false } })
-    const opts = sb.auth.signUp.mock.calls[0][0].options.data
-    expect(opts.legacy_username).toBe('Iker')
-    expect(opts.legacy_hash).toMatch(/^[0-9a-f]{64}$/)
+    expect(await signUp('Ana', 'secreta1')).toEqual({ data: true })
+    const arg = sb.auth.signUp.mock.calls[0][0]
+    expect(arg.email.endsWith('@' + INTERNAL_EMAIL_DOMAIN)).toBe(true)
+    expect(arg.options.data).toEqual({ username: 'Ana' })
   })
-  it('email ya existente y la contraseña nueva abre la cuenta de ese mismo usuario: éxito idempotente', async () => {
-    sb.rpc.mockResolvedValue({ data: true, error: null })
-    sb.auth.signUp.mockResolvedValue({ data: {}, error: { message: 'User already registered' } })
-    sb.auth.signInWithPassword.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null })
-    profileIs('iker')
-    const r = await claimLegacyAccount('Iker', 'vieja', 'a@b.com', 'nueva123')
-    expect(r.data).toBeTruthy()
-    expect(sb.auth.signOut).not.toHaveBeenCalled()
+  it('contraseña demasiado corta', async () => {
+    expect((await signUp('Ana', '123')).error).toMatch(/al menos 6/)
   })
-  it('email ya existente con otra contraseña: mensaje claro', async () => {
-    sb.rpc.mockResolvedValue({ data: true, error: null })
-    sb.auth.signUp.mockResolvedValue({ data: {}, error: { message: 'User already registered' } })
-    sb.auth.signInWithPassword.mockResolvedValue({ data: {}, error: { message: 'Invalid login credentials' } })
-    const r = await claimLegacyAccount('Iker', 'vieja', 'a@b.com', 'nueva123')
-    expect(r.error).toMatch(/otra contraseña/)
-    expect(r.error).toMatch(/olvidado/)
+  it('sin sesión (Confirm email activo) avisa en vez de fallar en silencio', async () => {
+    rpcs({ username_available: true })
+    sb.auth.signUp.mockResolvedValue({ data: { session: null }, error: null })
+    expect((await signUp('Ana', 'secreta1')).error).toMatch(/Confirm email/)
   })
-  it('email ya existente que pertenece a otro perfil: cierra sesión y avisa', async () => {
-    sb.rpc.mockResolvedValue({ data: true, error: null })
-    sb.auth.signUp.mockResolvedValue({ data: {}, error: { message: 'User already registered' } })
-    sb.auth.signInWithPassword.mockResolvedValue({ data: { user: { id: 'u2' } }, error: null })
-    profileIs('otro')
-    const r = await claimLegacyAccount('Iker', 'vieja', 'a@b.com', 'nueva123')
-    expect(r.error).toMatch(/no es la de este usuario/)
-    expect(sb.auth.signOut).toHaveBeenCalled()
+})
+
+describe('saveContactEmail', () => {
+  it('valida el formato antes de guardar', async () => {
+    expect((await saveContactEmail('p1', 'no-es-email')).error).toMatch(/no parece válido/)
+    expect(sb.from).not.toHaveBeenCalled()
+  })
+  it('guarda en profile_private y permite borrarlo', async () => {
+    const upsert = vi.fn().mockResolvedValue({ error: null })
+    sb.from.mockReturnValue({ upsert })
+    expect(await saveContactEmail('p1', ' a@b.com ')).toEqual({ data: 'a@b.com' })
+    expect(sb.from).toHaveBeenCalledWith('profile_private')
+    expect(upsert.mock.calls[0][0]).toMatchObject({ profile_id: 'p1', contact_email: 'a@b.com' })
+    expect(await saveContactEmail('p1', '')).toEqual({ data: null })
   })
 })

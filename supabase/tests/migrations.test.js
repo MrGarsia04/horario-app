@@ -11,6 +11,7 @@ const C = '00000000-0000-0000-0000-00000000000c'
 const LEGACY = '00000000-0000-0000-0000-0000000000ff'
 const LEGACY_AUTH = '00000000-0000-0000-0000-0000000000fe'
 const HASH = 'abc123'
+const PRE = '00000000-0000-0000-0000-0000000000aa'
 
 let db
 
@@ -264,3 +265,64 @@ describe('amistades y planes', () => {
     await db.exec(`reset role`)
   })
 })
+
+describe('0003: login por nombre de usuario', () => {
+  beforeAll(async () => {
+    // Cuenta creada con email real ANTES de 0003 (flujo anterior)
+    await db.exec(`create table auth.identities (user_id uuid, provider text, provider_id text, identity_data jsonb);`)
+    await q(`insert into auth.users (id,email,raw_user_meta_data) values ('${PRE}','real@gmail.com','{"username":"Pre"}')`)
+    await q(`insert into auth.identities values ('${PRE}','email','real@gmail.com','{"email":"real@gmail.com"}')`)
+    await db.exec(sql('0003_usuario_login.sql'))
+  })
+  const ALIAS = /@usuarios\.horario-app\.com$/
+  it('la cuenta previa con email real pasa a email interno y el real se guarda como contacto', async () => {
+    const u = (await q(`select email from auth.users where id=$1`, [PRE])).rows[0].email
+    expect(u).toMatch(ALIAS)
+    expect((await q(`select contact_email from profile_private where profile_id=$1`, [PRE])).rows[0].contact_email).toBe('real@gmail.com')
+    const i = (await q(`select identity_data->>'email' e, provider_id p from auth.identities where user_id=$1`, [PRE])).rows[0]
+    expect(i.e).toMatch(ALIAS)
+    expect(i.p).toBe(PRE)
+  })
+  it('login_alias devuelve el email interno por nombre (sin distinguir mayúsculas) y null si no existe', async () => {
+    const a = (await q(`select login_alias('PRE') a`)).rows[0].a
+    expect(a).toMatch(ALIAS)
+    expect((await q(`select login_alias('nadie') a`)).rows[0].a).toBeNull()
+  })
+  it('una cuenta nueva registrada con email interno recibe alias', async () => {
+    const mail = 'f0f0f0f0-0000-0000-0000-000000000001@usuarios.horario-app.com'
+    await q(`insert into auth.users (id,email,raw_user_meta_data) values ('00000000-0000-0000-0000-0000000000d1',$1,'{"username":"Nuevo"}')`, [mail])
+    expect((await q(`select login_alias('nuevo') a`)).rows[0].a).toBe(mail)
+  })
+  it('anon puede llamar a login_alias pero no leer login_aliases', async () => {
+    await db.exec(`set role anon`)
+    expect((await q(`select login_alias('pre') a`)).rows[0].a).toMatch(ALIAS)
+    expect(await fails(`select * from login_aliases`)).toMatch(/permission denied/)
+    await db.exec(`reset role`)
+  })
+  it('el email de contacto es privado: solo su dueño lo ve y lo edita', async () => {
+    await as(PRE, async () => expect((await q(`select * from profile_private`)).rows).toHaveLength(1))
+    await as(A, async () => {
+      expect((await q(`select profile_id from profile_private`)).rows).toEqual([{ profile_id: A }])
+      expect(await fails(`insert into profile_private (profile_id, contact_email) values ('${PRE}','x@y.com')`)).toBeTruthy()
+    })
+  })
+  it('borrar una cuenta de Auth no borra el perfil ni sus datos', async () => {
+    const T = '00000000-0000-0000-0000-0000000000f1'
+    await q(`insert into auth.users (id,email,raw_user_meta_data) values ($1,'t@usuarios.horario-app.com','{"username":"Temp"}')`, [T])
+    await q(`delete from auth.users where id=$1`, [T])
+    const r = await q(`select auth_id from profiles where id=$1`, [T])
+    expect(r.rows).toEqual([{ auth_id: null }])
+  })
+  it('la cuenta antigua ya reclamada también recibe alias y conserva su email como contacto', async () => {
+    expect((await q(`select login_alias('viejo') a`)).rows[0].a).toMatch(ALIAS)
+    expect((await q(`select contact_email from profile_private where profile_id=$1`, [LEGACY])).rows[0].contact_email).toBe('viejo@x.com')
+  })
+  it('reclamar una cuenta antigua con el trigger nuevo deja alias', async () => {
+    const P = '00000000-0000-0000-0000-0000000000e1'
+    await q(`insert into profiles (id, username) values ($1, 'otro')`, [P])
+    await q(`insert into legacy_credentials values ($1, 'h2')`, [P])
+    await q(`insert into auth.users (id,email,raw_user_meta_data) values ('00000000-0000-0000-0000-0000000000d2','zz@usuarios.horario-app.com',$1)`, [JSON.stringify({ legacy_username: 'otro', legacy_hash: 'h2' })])
+    expect((await q(`select login_alias('otro') a`)).rows[0].a).toBe('zz@usuarios.horario-app.com')
+  })
+})
+

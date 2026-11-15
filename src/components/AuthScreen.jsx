@@ -1,62 +1,47 @@
 import { useState } from 'react'
-import { signIn, signUp, claimLegacyAccount, requestPasswordReset, MIN_PASSWORD } from '../lib/auth'
+import { signIn, signUp, MIN_PASSWORD } from '../lib/auth'
 import ThemeToggle from './ThemeToggle'
 import InstallButton from './InstallButton'
 import bowUrl from '../assets/rosa/bow.svg'
 
-// mode: 'login' | 'signup' | 'forgot'. Al iniciar sesión, AuthContext detecta la sesión
-// por onAuthStateChange, así que no hace falta devolver nada al padre.
+// Un solo formulario: usuario + contraseña. AuthContext detecta la sesión por
+// onAuthStateChange, así que no hace falta devolver nada al padre.
 export default function AuthScreen() {
   const [mode, setMode] = useState('login')
   const [username, setUsername] = useState('')
-  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [oldPassword, setOldPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [needNewPassword, setNeedNewPassword] = useState(false)
   const [error, setError] = useState('')
-  const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
 
-  function switchMode(next) {
-    setMode(next)
+  function switchMode() {
+    setMode(mode === 'login' ? 'signup' : 'login')
     setError('')
-    setInfo('')
+    setNeedNewPassword(false)
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    setInfo('')
     setLoading(true)
-
-    let result
-    if (mode === 'login') result = await signIn(email, password)
-    else if (mode === 'legacy') result = await claimLegacyAccount(username, oldPassword, email, password)
-    else if (mode === 'signup') result = await signUp(username, email, password)
-    else result = await requestPasswordReset(email)
-
+    const result =
+      mode === 'login' ? await signIn(username, password, needNewPassword ? newPassword : undefined) : await signUp(username, password)
     setLoading(false)
-    if (result.error === 'LEGACY_USERNAME') {
-      setUsername(email)
-      setEmail('')
-      setMode('legacy')
-      setInfo('Eso parece un nombre de usuario antiguo. Rellena estos datos para pasar tu cuenta al nuevo sistema; no pierdes nada.')
+
+    if (result.needNewPassword) {
+      setNeedNewPassword(true)
+      setError(
+        needNewPassword
+          ? `Elige una contraseña nueva distinta, de al menos ${MIN_PASSWORD} caracteres.`
+          : `Tu contraseña de siempre es muy corta para el sistema nuevo. Elige una nueva (mínimo ${MIN_PASSWORD} caracteres).`
+      )
       return
     }
-    if (result.error) {
-      setError(result.error)
-      return
-    }
-    if ((mode === 'signup' || mode === 'legacy') && result.data.needsConfirmation) {
-      switchMode('login')
-      setInfo('Cuenta creada. Te hemos enviado un email: confírmalo para poder entrar.')
-    } else if (mode === 'forgot') {
-      setInfo('Si ese email tiene cuenta, te hemos enviado un enlace para restablecer la contraseña.')
-    }
+    if (result.error) setError(result.error)
   }
 
-  const title = mode === 'login' ? 'Inicia sesión' : mode === 'signup' ? 'Crea tu cuenta' : mode === 'legacy' ? 'Pasa tu cuenta antigua' : 'Recupera tu contraseña'
-  const inputClass =
-    'w-full mb-4 bg-board-bg border border-board-line rounded px-3 py-2 outline-none focus:border-board-amber'
+  const inputClass = 'w-full mb-4 bg-board-bg border border-board-line rounded px-3 py-2 outline-none focus:border-board-amber'
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
@@ -66,104 +51,64 @@ export default function AuthScreen() {
 
         <form onSubmit={handleSubmit} className="w-full bg-board-panel border border-board-line rounded-md p-8">
           <p className="font-mono text-board-amber text-xs tracking-wide mb-1">panel de horarios</p>
-          <h1 className="text-2xl font-semibold mb-6">{title}</h1>
+          <h1 className="text-2xl font-semibold mb-6">{mode === 'login' ? 'Inicia sesión' : 'Crea tu cuenta'}</h1>
 
-          {(mode === 'signup' || mode === 'legacy') && (
-            <>
-              <label className="block text-sm text-board-cream/70 mb-1">{mode === 'legacy' ? 'Tu nombre de usuario de siempre' : 'Nombre de usuario'}</label>
-              <input
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="iker"
-                autoComplete="username"
-                className={inputClass}
-              />
-            </>
-          )}
-
-          {mode === 'legacy' && (
-            <>
-              <label className="block text-sm text-board-cream/70 mb-1">Tu contraseña de siempre</label>
-              <input
-                type="password"
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-                autoComplete="off"
-                className={inputClass}
-              />
-            </>
-          )}
-
-          <label className="block text-sm text-board-cream/70 mb-1">{mode === 'legacy' ? 'Email (a partir de ahora entrarás con él)' : 'Email'}</label>
+          <label className="block text-sm text-board-cream/70 mb-1">Nombre de usuario</label>
           <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="tu@email.com"
-            autoComplete="email"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="iker"
+            autoComplete="username"
+            autoCapitalize="none"
             className={inputClass}
           />
 
-          {mode !== 'forgot' && (
+          <label className="block text-sm text-board-cream/70 mb-1">Contraseña</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            className="w-full mb-2 bg-board-bg border border-board-line rounded px-3 py-2 outline-none focus:border-board-amber"
+          />
+          {mode === 'signup' && <p className="text-xs text-board-cream/40 mb-4">Mínimo {MIN_PASSWORD} caracteres.</p>}
+
+          {needNewPassword && (
             <>
-              <label className="block text-sm text-board-cream/70 mb-1">{mode === 'legacy' ? 'Contraseña nueva' : 'Contraseña'}</label>
+              <label className="block text-sm text-board-cream/70 mb-1 mt-2">Contraseña nueva</label>
               <input
                 type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                className="w-full mb-2 bg-board-bg border border-board-line rounded px-3 py-2 outline-none focus:border-board-amber"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
+                className={inputClass}
               />
-              {(mode === 'signup' || mode === 'legacy') && (
-                <p className="text-xs text-board-cream/40 mb-4">Mínimo {MIN_PASSWORD} caracteres.</p>
-              )}
             </>
           )}
 
-          {mode === 'login' && (
-            <button
-              type="button"
-              onClick={() => switchMode('legacy')}
-              className="text-xs text-board-amber hover:brightness-110 mb-2 block"
-            >
-              Ya tenía cuenta de antes (solo con usuario)
-            </button>
-          )}
-          {mode === 'login' && (
-            <button
-              type="button"
-              onClick={() => switchMode('forgot')}
-              className="text-xs text-board-cream/50 hover:text-board-cream mb-4 block"
-            >
-              He olvidado mi contraseña
-            </button>
-          )}
-
-          {error && <p className="text-sm text-board-danger mb-4">{error}</p>}
-          {info && <p className="text-sm text-board-teal mb-4">{info}</p>}
+          {error && <p className="text-sm text-board-danger my-3">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
             className="w-full bg-board-amber text-board-onaccent font-semibold py-2 rounded hover:brightness-110 transition disabled:opacity-60"
           >
-            {loading
-              ? 'Un momento…'
-              : mode === 'login'
-                ? 'Entrar'
-                : mode === 'signup' || mode === 'legacy'
-                  ? mode === 'legacy' ? 'Pasar mi cuenta' : 'Crear cuenta'
-                  : 'Enviar enlace'}
+            {loading ? 'Un momento…' : mode === 'login' ? 'Entrar' : 'Crear cuenta'}
           </button>
 
           <button
             type="button"
-            onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}
+            onClick={switchMode}
             className="w-full text-center text-sm text-board-cream/50 hover:text-board-cream mt-4"
           >
-            {mode === 'login' ? '¿No tienes cuenta? Créala' : '← Volver a iniciar sesión'}
+            {mode === 'login' ? '¿No tienes cuenta? Créala' : '¿Ya tienes cuenta? Inicia sesión'}
           </button>
+          {mode === 'login' && (
+            <p className="text-center text-xs text-board-cream/40 mt-3">
+              ¿Olvidaste la contraseña? Pídele a quien administra la app que te la restablezca.
+            </p>
+          )}
         </form>
 
         <div className="mt-5">

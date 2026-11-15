@@ -6,11 +6,6 @@ import { supabase } from './supabaseClient'
 
 export const MIN_PASSWORD = 6
 
-function isEmailTakenError(error) {
-  const msg = (error?.message ?? '').toLowerCase()
-  return msg.includes('already registered') || msg.includes('already been registered') || error?.code === 'user_already_exists'
-}
-
 function translateAuthError(error) {
   const msg = (error?.message ?? '').toLowerCase()
   if (msg.includes('username_taken')) return 'Ese nombre de usuario ya está en uso, prueba con otro.'
@@ -25,10 +20,16 @@ function translateAuthError(error) {
   return error?.message || 'Ha ocurrido un error. Inténtalo de nuevo.'
 }
 
-export async function signUp(username, email, password) {
+// Cada cuenta de Supabase Auth necesita un email: usamos uno INTERNO inventado que el
+// usuario nunca ve (se entra con nombre de usuario). Se resuelve por RPC login_alias.
+// Requiere "Confirm email" desactivado en Supabase: no se envía ningún correo.
+export const INTERNAL_EMAIL_DOMAIN = 'usuarios.horario-app.com'
+export const newInternalEmail = () => `${crypto.randomUUID()}@${INTERNAL_EMAIL_DOMAIN}`
+const BAD_CREDENTIALS = 'Usuario o contraseña incorrectos.'
+
+export async function signUp(username, password) {
   const name = username.trim()
-  const mail = email.trim()
-  if (!name || !mail || !password) return { error: 'Rellena nombre de usuario, email y contraseña.' }
+  if (!name || !password) return { error: 'Rellena usuario y contraseña.' }
   if (name.length < 2 || name.length > 30) return { error: 'El nombre de usuario debe tener entre 2 y 30 caracteres.' }
   if (password.length < MIN_PASSWORD) return { error: `La contraseña debe tener al menos ${MIN_PASSWORD} caracteres.` }
 
@@ -36,85 +37,80 @@ export async function signUp(username, email, password) {
   if (!availErr && available === false) return { error: 'Ese nombre de usuario ya está en uso, prueba con otro.' }
 
   const { data, error } = await supabase.auth.signUp({
-    email: mail,
+    email: newInternalEmail(),
     password,
-    options: { data: { username: name }, emailRedirectTo: window.location.origin },
+    options: { data: { username: name } },
   })
   if (error) return { error: translateAuthError(error) }
-  // Con "Confirm email" activado en Supabase no hay sesión hasta confirmar.
-  return { data: { needsConfirmation: !data.session } }
+  if (!data.session) return { error: 'La cuenta se creó pero requiere confirmación por email; desactiva «Confirm email» en Supabase.' }
+  return { data: true }
 }
 
-// SOLO para reclamar cuentas antiguas: las contraseñas antiguas se guardaban como SHA-256
-// y la base de datos las compara con este hash. Se puede borrar cuando todos hayan migrado.
+// Inicio de sesión con usuario + contraseña. Si es una cuenta ANTIGUA aún sin migrar y la
+// contraseña es la de siempre, se migra aquí mismo, sin pasos extra para la persona.
+// Si esa contraseña antigua es más corta que el mínimo de Supabase, devuelve
+// { needNewPassword: true } y hay que volver a llamar con newPassword.
+export async function signIn(username, password, newPassword) {
+  const name = username.trim()
+  if (!name || !password) return { error: 'Rellena usuario y contraseña.' }
+
+  const { data: alias } = await supabase.rpc('login_alias', { p_username: name })
+  if (alias) {
+    const { error } = await supabase.auth.signInWithPassword({ email: alias, password })
+    if (error) {
+      const msg = (error.message ?? '').toLowerCase()
+      return { error: msg.includes('invalid login') ? BAD_CREDENTIALS : translateAuthError(error) }
+    }
+    return { data: true }
+  }
+
+  const hash = await legacyHash(password)
+  const { data: valid } = await supabase.rpc('legacy_claim_valid', { p_username: name, p_hash: hash })
+  if (!valid) return { error: BAD_CREDENTIALS }
+
+  const nextPassword = newPassword || password
+  if (nextPassword.length < MIN_PASSWORD) return { needNewPassword: true }
+  if (newPassword && newPassword === password) return { needNewPassword: true }
+
+  // La reclamación ocurre dentro del trigger del signUp (atómica: si falla, no se crea nada).
+  const { data, error } = await supabase.auth.signUp({
+    email: newInternalEmail(),
+    password: nextPassword,
+    options: { data: { legacy_username: name, legacy_hash: hash } },
+  })
+  if (error) return { error: translateAuthError(error) }
+  if (!data.session) return { error: 'No se pudo iniciar sesión: desactiva «Confirm email» en Supabase.' }
+  return { data: true }
+}
+
+// SOLO para migrar cuentas antiguas: sus contraseñas eran SHA-256 y la base las compara con
+// este hash. Se puede borrar cuando todos hayan entrado una vez.
 async function legacyHash(password) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password))
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-// Usuario antiguo (sin email) que entra por primera vez: demuestra su contraseña antigua y
-// elige email + contraseña nueva. Su perfil, grupos y horarios se conservan.
-export async function claimLegacyAccount(username, oldPassword, email, newPassword) {
-  const name = username.trim()
-  const mail = email.trim()
-  if (!name || !oldPassword || !mail || !newPassword) return { error: 'Rellena todos los campos.' }
-  if (newPassword.length < MIN_PASSWORD) return { error: `La contraseña nueva debe tener al menos ${MIN_PASSWORD} caracteres.` }
+// Email de contacto (opcional). Va a profile_private, visible solo para su dueño.
+// No se usa auth.updateUser({ email }) porque enviaría correos de confirmación.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
-  const hash = await legacyHash(oldPassword)
-  const { data: valid, error: checkErr } = await supabase.rpc('legacy_claim_valid', { p_username: name, p_hash: hash })
-  if (checkErr) return { error: translateAuthError(checkErr) }
-  if (!valid) return { error: 'Usuario o contraseña antigua incorrectos (o esa cuenta ya fue migrada: entra con tu email).' }
-
-  // La reclamación ocurre dentro del trigger de signUp (atómica): si falla, no se crea la cuenta.
-  const { data, error } = await supabase.auth.signUp({
-    email: mail,
-    password: newPassword,
-    options: { data: { legacy_username: name, legacy_hash: hash }, emailRedirectTo: window.location.origin },
-  })
-  if (!error) return { data: { needsConfirmation: !data.session } }
-
-  if (!isEmailTakenError(error)) return { error: translateAuthError(error) }
-
-  // El email ya tiene cuenta (p. ej. un intento anterior que sí llegó a crearla).
-  // Reintento idempotente: si la contraseña nueva abre esa cuenta y ya es la del perfil
-  // antiguo, no hay nada más que hacer.
-  const { data: signed, error: signErr } = await supabase.auth.signInWithPassword({ email: mail, password: newPassword })
-  if (signErr || !signed?.user) {
-    return {
-      error:
-        'Ese email ya tiene una cuenta con otra contraseña. Inicia sesión con ella, o usa «He olvidado mi contraseña».',
-    }
-  }
-  const { data: profile } = await supabase.from('profiles').select('username').eq('auth_id', signed.user.id).maybeSingle()
-  if (profile && profile.username.toLowerCase() === name.toLowerCase()) {
-    return { data: { needsConfirmation: false } }
-  }
-  await supabase.auth.signOut()
-  return {
-    error:
-      'Ese email ya tiene una cuenta que no es la de este usuario antiguo. Usa otro email, o pide que se elimine esa cuenta vacía.',
-  }
+export async function getContactEmail(profileId) {
+  const { data } = await supabase.from('profile_private').select('contact_email').eq('profile_id', profileId).maybeSingle()
+  return data?.contact_email ?? null
 }
 
-export async function signIn(email, password) {
-  if (!email.trim() || !password) return { error: 'Rellena email y contraseña.' }
-  if (!email.includes('@')) return { error: 'LEGACY_USERNAME' }
-  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
-  if (error) return { error: translateAuthError(error) }
-  return { data: data.user }
+export async function saveContactEmail(profileId, email) {
+  const mail = email.trim()
+  if (mail && !EMAIL_RE.test(mail)) return { error: 'Ese email no parece válido.' }
+  const { error } = await supabase
+    .from('profile_private')
+    .upsert({ profile_id: profileId, contact_email: mail || null, updated_at: new Date().toISOString() })
+  if (error) return { error: error.message }
+  return { data: mail || null }
 }
 
 export async function signOut() {
   await supabase.auth.signOut()
-}
-
-export async function requestPasswordReset(email) {
-  if (!email.trim()) return { error: 'Escribe tu email.' }
-  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-    redirectTo: `${window.location.origin}/restablecer`,
-  })
-  if (error) return { error: translateAuthError(error) }
-  return { data: true }
 }
 
 // Para el flujo de recuperación (ya hay sesión temporal tras abrir el enlace del email).

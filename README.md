@@ -140,3 +140,11 @@ npx supabase db push
 En el panel de Supabase (Authentication → URL Configuration) añade tu dominio y
 `<dominio>/restablecer` a las Redirect URLs. `npm test` prueba las migraciones en un
 Postgres en memoria (PGlite), sin tocar ninguna base real.
+
+### Acceso: usuario + contraseña (migración 0003)
+
+Se entra con nombre de usuario y contraseña. Por dentro cada cuenta usa un email inventado
+(`<uuid>@usuarios.horario-app.com`) que nadie ve; **«Confirm email» debe estar desactivado** en
+Supabase. El correo real es opcional: se ofrece tras iniciar sesión y se guarda en
+`profile_private` (solo lo ve su dueño). Sin SMTP no hay recuperación por email: un administrador
+restablece la contraseña por SQL (`update auth.users set encrypted_password = extensions.crypt('nueva', extensions.gen_salt('bf')) where id = (select auth_id from public.profiles where lower(username) = 'usuario');`).

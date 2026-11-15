@@ -6,6 +6,7 @@ import FriendsPanel from './FriendsPanel'
 import PublicProfile from './PublicProfile'
 import { ThemePicker } from './ThemeToggle'
 import InstallButton from './InstallButton'
+import ContactEmailCard from './ContactEmailCard'
 
 export default function ProfileScreen({ userId, username, onUsernameChanged, onBack, onSignOut }) {
   const queryClient = useQueryClient()
@@ -123,6 +124,7 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
 
       {tab === 'cuenta' ? (
         <div className="space-y-4">
+          <ContactEmailCard title="Correo de contacto" />
           <div className="bg-board-panel border border-board-line rounded-md p-6">
             <p className="text-sm text-board-cream/70 mb-2">Nombre de usuario</p>
             {editingName ? (
