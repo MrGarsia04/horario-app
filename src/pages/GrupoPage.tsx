@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { defaultWeek } from '../lib/weeks'
 import { autoWindow, toLabel } from '../lib/schedule/availability'
+import { effectiveWindow, hasHiddenBusy, loadMapView, mapViewKey, saveMapView, type MapViewPref } from '../lib/schedule/mapView'
+import MapViewControl from '../components/schedule/MapViewControl'
 import { useGroupView } from '../hooks/useGroupView'
 import GroupHeatmap from '../components/GroupHeatmap'
 import AvailabilityMap from '../components/schedule/AvailabilityMap'
@@ -20,13 +22,22 @@ export default function GrupoPage() {
   const [tab, setTab] = useState<'mapa' | 'miembros'>('mapa')
   const [selected, setSelected] = useState<string | null>(null)
   const v = useGroupView(codigo, week)
+  // Vista propia del mapa: por persona y grupo, en este dispositivo
+  const viewKey = mapViewKey(v.user.id, codigo)
+  const [myView, setMyView] = useState<{ key: string; pref: MapViewPref | null }>(() => ({ key: viewKey, pref: loadMapView(viewKey) }))
+  const pref = myView.key === viewKey ? myView.pref : loadMapView(viewKey)
 
   if (v.modelLoading || v.membersLoading) return <p className="text-sm text-board-cream/50">Cargando…</p>
 
   const selectedSchedule = v.scheduleMembers.filter((m) => m.name === selected)
   // El rango del mapa se calcula solo a partir de los horarios reales (ya no hay ajuste de grupo)
-  const win = autoWindow(v.scheduleMembers, week, codigo)
+  const autoWin = autoWindow(v.scheduleMembers, week, codigo)
+  // …salvo que hayas elegido tu propia vista (días y horas), que se recuerda en este dispositivo
+  const win = effectiveWindow(autoWin, pref)
   const mapConfig = { days: win.days, startTime: toLabel(win.startMin), endTime: toLabel(win.endMin) }
+  const viewControl = <MapViewControl auto={autoWin} value={pref} onChange={(p) => { setMyView({ key: viewKey, pref: p }); saveMapView(viewKey, p) }} />
+  // Aviso si la vista elegida deja fuera algo que cuenta (el cálculo no cambia, solo lo que se ve)
+  const hiddenNotice = pref && hasHiddenBusy(v.scheduleMembers, week, codigo, win) ? 'Hay horarios fuera de este rango (otros días u horas).' : null
 
   return (
     <div>
@@ -50,9 +61,9 @@ export default function GrupoPage() {
           {v.scheduleLoading ? (
             <p className="text-sm text-board-cream/50">Cargando horarios…</p>
           ) : selected ? (
-            <AvailabilityMap single config={mapConfig} members={selectedSchedule} weekStart={week} groupCode={codigo} myUserId={v.user.id} highlightDayKey={v.birthdayDayKey} />
+            <AvailabilityMap single viewControl={viewControl} notice={hiddenNotice} config={mapConfig} members={selectedSchedule} weekStart={week} groupCode={codigo} myUserId={v.user.id} highlightDayKey={v.birthdayDayKey} />
           ) : (
-            <AvailabilityMap config={mapConfig} members={v.scheduleMembers} weekStart={week} groupCode={codigo} myUserId={v.user.id} highlightDayKey={v.birthdayDayKey} />
+            <AvailabilityMap viewControl={viewControl} notice={hiddenNotice} config={mapConfig} members={v.scheduleMembers} weekStart={week} groupCode={codigo} myUserId={v.user.id} highlightDayKey={v.birthdayDayKey} />
           )}
         </div>
       ) : (

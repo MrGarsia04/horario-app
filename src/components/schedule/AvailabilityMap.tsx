@@ -18,6 +18,10 @@ interface Props {
   highlightDayKey?: DayKey | null
   /** Con un solo miembro (ver el horario de una persona) se pinta ocupado/libre en vez de intensidad. */
   single?: boolean
+  /** control extra para la fila de opciones (p. ej. «Vista» de días y horas) */
+  viewControl?: React.ReactNode
+  /** aviso discreto bajo las opciones (p. ej. «Hay horarios fuera de este rango») */
+  notice?: string | null
 }
 
 const ROW_PX: Record<number, number> = { 60: 48, 30: 44 } // ≥ 44 px: se acierta con el dedo
@@ -27,7 +31,7 @@ function ranges(c: { freeRanges: { start: number; end: number }[] }) {
   return c.freeRanges.map((r) => `${toLabel(r.start)}–${toLabel(r.end)}`).join(', ')
 }
 
-export default function AvailabilityMap({ config, members, weekStart, groupCode, myUserId, highlightDayKey, single = false }: Props) {
+export default function AvailabilityMap({ config, members, weekStart, groupCode, myUserId, highlightDayKey, single = false, viewControl, notice }: Props) {
   const [step, setStep] = useState<60 | 30>(60)
   const [onlyMine, setOnlyMine] = useState(false)
   const [sel, setSel] = useState<{ day: DayKey; startMin: number } | null>(null)
@@ -46,8 +50,11 @@ export default function AvailabilityMap({ config, members, weekStart, groupCode,
       <div className="mb-3 flex flex-wrap items-center gap-2" role="group" aria-label="Opciones del mapa">
         <Chip active={step === 60} onClick={() => setStep(60)}>1 hora</Chip>
         <Chip active={step === 30} onClick={() => setStep(30)}>30 min</Chip>
+        {viewControl}
         {!single && <Chip active={onlyMine} onClick={() => setOnlyMine((o) => !o)}>Solo cuando yo estoy libre</Chip>}
       </div>
+
+      {notice && <p className="mb-3 text-xs text-board-cream/60" role="status">ⓘ {notice}</p>}
 
       <div className="card !p-0 overflow-hidden">
         <div className="grid" style={{ gridTemplateColumns: `44px repeat(${grid.length}, minmax(0, 1fr))` }}>
