@@ -1,4 +1,4 @@
-import { addWeeks, formatWeekLabel, getWeekStart } from '../lib/weeks'
+import { addWeeks, formatWeekLabelShort, getWeekStart } from '../lib/weeks'
 
 export default function WeekNavigator({ weekStart, onChange, statusText }) {
   const isCurrentWeek = weekStart === getWeekStart(new Date())
@@ -14,7 +14,7 @@ export default function WeekNavigator({ weekStart, onChange, statusText }) {
       </button>
 
       <div className="text-center">
-        <div className="font-mono text-sm">{formatWeekLabel(weekStart)}</div>
+        <div className="font-mono text-sm">{formatWeekLabelShort(weekStart)}</div>
         <div className="flex items-center justify-center gap-2 mt-0.5">
           {!isCurrentWeek && (
             <button

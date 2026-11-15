@@ -38,7 +38,7 @@ export default function SettingsSheet({ open, onClose, groupCode, onShowTutorial
 
   return (
     <Sheet open={open} onClose={onClose} title="Ajustes" tall>
-      <Section title="Apariencia"><ThemePicker /></Section>
+      <Section title="Apariencia"><ThemePicker compact /></Section>
 
       {groupCode && model.data === true && (
         <Section title={`Privacidad en «${groupCode}»`}>
@@ -57,7 +57,7 @@ export default function SettingsSheet({ open, onClose, groupCode, onShowTutorial
         </Section>
       )}
 
-      <Section title="Correo de contacto"><ContactEmailCard title="Tu correo" /></Section>
+      <Section title="Correo de contacto"><ContactEmailCard title="Tu correo (opcional)" /></Section>
 
       <Section title="Ayuda y app">
         <div className="flex flex-col gap-2">

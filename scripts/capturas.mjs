@@ -1,0 +1,125 @@
+// Capturas de pantalla de la app con datos de ejemplo (Supabase simulado: no toca ninguna base real).
+// Uso: arrancar `VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_ANON_KEY=x npx vite --port 5190`
+// y luego `node scripts/capturas.mjs`. Salida: capturas-fase-2/
+import { chromium } from 'playwright'
+import { mkdirSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+
+const BASE = process.env.BASE ?? 'http://localhost:5190'
+const OUT = new URL('../capturas-fase-2/', import.meta.url).pathname
+mkdirSync(OUT, { recursive: true })
+const exe = process.env.CHROME ?? join(homedir(), '.cache/ms-playwright/chromium-1248/chrome-linux64/chrome')
+
+const ME = '00000000-0000-0000-0000-000000000001'
+const others = { '00000000-0000-0000-0000-000000000002': 'Ana', '00000000-0000-0000-0000-000000000003': 'Beto', '00000000-0000-0000-0000-000000000004': 'Carla' }
+const names = { [ME]: 'Iker', ...others }
+const T = (u) => ({ id: 't-' + u.slice(-1), user_id: u, name: 'Clases', is_active: true, active_from: null, active_to: null, created_at: '2026-01-01' })
+const B = (u, i, day, s, e, title, color, repeat = 'weekly') => ({ id: `b${u.slice(-1)}${i}`, template_id: 't-' + u.slice(-1), user_id: u, group_code: null, title, color, location: null, day, start_min: s, end_min: e, repeat, valid_from: null, valid_to: null })
+const blocks = [
+  B(ME, 1, 'mon', 540, 630, 'Cálculo', '#4C7C7C'), B(ME, 2, 'mon', 720, 810, 'Física', '#5B8DEF'), B(ME, 3, 'tue', 600, 720, 'Prácticas', '#C0504D', 'biweekly_a'),
+  B(ME, 4, 'wed', 540, 660, 'Álgebra', '#8E6BBF'), B(ME, 5, 'thu', 780, 870, 'Inglés', '#4CAF7A'), B(ME, 6, 'fri', 600, 690, 'Lab', '#E8A33D'),
+  B('00000000-0000-0000-0000-000000000002', 1, 'mon', 570, 660, null, null), B('00000000-0000-0000-0000-000000000002', 2, 'tue', 540, 780, null, null),
+  B('00000000-0000-0000-0000-000000000003', 1, 'mon', 600, 720, null, null), B('00000000-0000-0000-0000-000000000003', 2, 'wed', 540, 660, null, null), B('00000000-0000-0000-0000-000000000003', 3, 'thu', 840, 960, null, null),
+  B('00000000-0000-0000-0000-000000000004', 1, 'tue', 600, 690, null, null), B('00000000-0000-0000-0000-000000000004', 2, 'fri', 540, 720, null, null),
+]
+const templates = Object.keys(names).map(T)
+const config = { days: ['mon', 'tue', 'wed', 'thu', 'fri'], startTime: '09:00', endTime: '19:00', slotMinutes: 90, breaks: [] }
+
+const rows = {
+  profiles: [{ id: ME, username: 'Iker', auth_id: ME, birthday: null, bio: null }, ...Object.entries(others).map(([id, username]) => ({ id, username, auth_id: id, birthday: null, bio: null }))],
+  profile_private: [{ profile_id: ME, contact_email: 'iker@correo.com' }],
+  group_memberships: Object.keys(names).map((u, i) => ({ user_id: u, group_code: 'informaticos', role: i === 0 ? 'owner' : 'member', joined_at: '2026-01-0' + (i + 1), schedule_visibility: 'busy' })),
+  group_settings: [{ group_code: 'informaticos', config, updated_at: '2026-01-01' }],
+  schedules: [], schedule_overrides: [], friendships: [], events: [], event_invitations: [],
+  schedule_templates: templates.filter((t) => t.user_id === ME), schedule_blocks: blocks.filter((b) => b.user_id === ME), schedule_exceptions: [],
+}
+
+async function mockSupabase(context) {
+  await context.route('http://127.0.0.1:54321/**', async (route) => {
+    const req = route.request()
+    const url = new URL(req.url())
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'access-control-expose-headers': '*' }
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors })
+    const json = (body, status = 200) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    if (url.pathname.startsWith('/rest/v1/rpc/')) {
+      const fn = url.pathname.split('/').pop()
+      if (fn === 'group_schedules') {
+        return json({ visibility: Object.fromEntries(Object.keys(names).map((u) => [u, 'busy'])), templates, blocks: blocks.map((b) => (b.user_id === ME ? b : { ...b, title: null, color: null })), exceptions: [] })
+      }
+      if (fn === 'get_invite_code') return json('a1b2c3d4e5f60718293a4b5c')
+      return json(null)
+    }
+    if (url.pathname.startsWith('/rest/v1/')) {
+      const table = url.pathname.split('/').pop()
+      let data = rows[table] ?? []
+      // filtros básicos de PostgREST: col=eq.valor y col=in.(a,b)
+      for (const [col, val] of url.searchParams) {
+        if (val.startsWith('eq.')) data = data.filter((r) => String(r[col]) === val.slice(3))
+        else if (val.startsWith('in.(')) data = data.filter((r) => val.slice(4, -1).split(',').includes(String(r[col])))
+      }
+      const single = (req.headers()['accept'] ?? '').includes('vnd.pgrst.object')
+      if (single) {
+        return data[0] ? json(data[0]) : route.fulfill({ status: 406, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ code: 'PGRST116', message: 'no rows', details: '', hint: null }) })
+      }
+      return json(data)
+    }
+    return json({})
+  })
+}
+
+const session = JSON.stringify({
+  access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600,
+  user: { id: ME, aud: 'authenticated', role: 'authenticated', email: 'u@usuarios.horario-app.com', user_metadata: { username: 'Iker' } },
+})
+
+const browser = await chromium.launch({ executablePath: exe })
+const sizes = [['movil-390x844', 390, 844, 3], ['movil-360x740', 360, 740, 3], ['escritorio-1280', 1280, 800, 1]]
+const themes = ['panel', 'rosa']
+
+for (const [label, width, height, dpr] of sizes) {
+  for (const theme of themes) {
+    if (label !== 'movil-390x844' && theme === 'rosa') continue // rosa solo en el móvil principal
+    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: dpr === 3 ? 2 : 1, hasTouch: dpr === 3, isMobile: dpr === 3 })
+    await mockSupabase(context)
+    await context.addInitScript(([s, t]) => {
+      localStorage.setItem('sb-127-auth-token', s)
+      localStorage.setItem('horario-app-theme', t === 'rosa' ? 'rosa' : 'panel')
+      if (!sessionStorage.getItem('ver-tutorial')) localStorage.setItem('opf-tutorial-v1', '1')
+    }, [session, theme])
+    const page = await context.newPage()
+    const errors = []
+    page.on('pageerror', (e) => errors.push(e.message))
+    const shot = async (name) => page.screenshot({ path: `${OUT}${label}-${theme}-${name}.png` })
+    const goto = async (path) => { await page.goto(BASE + path); await page.waitForTimeout(900) }
+
+    await goto('/g/informaticos')
+    await shot('1-horario')
+    await page.getByRole('button', { name: 'Bloque' }).click()
+    await page.waitForTimeout(300)
+    await shot('2-bloque-nuevo')
+    await page.getByRole('button', { name: 'Cerrar' }).click()
+    await page.getByRole('tab', { name: 'Plantillas y fechas' }).click()
+    await page.waitForTimeout(300)
+    await shot('3-plantillas')
+    await goto('/g/informaticos/grupo')
+    await shot('4-grupo')
+    await page.locator('button[aria-label*="libres"]').nth(30).click()
+    await page.waitForTimeout(300)
+    await shot('5-franja')
+    await page.getByRole('button', { name: 'Cerrar' }).click()
+    await page.getByRole('button', { name: 'Ajustes' }).click()
+    await page.waitForTimeout(300)
+    await shot('6-ajustes')
+    await page.getByRole('button', { name: 'Cerrar' }).first().click()
+    if (theme === 'panel') {
+      await page.evaluate(() => { sessionStorage.setItem('ver-tutorial', '1'); localStorage.removeItem('opf-tutorial-v1') })
+      await goto('/grupos')
+      await shot('7-tutorial')
+    }
+    if (errors.length) console.log(label, theme, 'ERRORES:', errors.slice(0, 3))
+    await context.close()
+  }
+}
+await browser.close()
+console.log('Capturas en', OUT)

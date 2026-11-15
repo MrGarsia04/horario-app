@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getWeekStart } from '../lib/weeks'
+import { defaultWeek } from '../lib/weeks'
 import { useGroupView } from '../hooks/useGroupView'
 import GroupHeatmap from '../components/GroupHeatmap'
 import GroupHeatmap15 from '../components/schedule/GroupHeatmap15'
@@ -16,7 +16,7 @@ import { Tabs, EmptyState } from '../ui/misc'
 export default function GrupoPage() {
   const codigo = decodeURIComponent(useParams().codigo ?? '')
   const navigate = useNavigate()
-  const [week, setWeek] = useState(getWeekStart(new Date()))
+  const [week, setWeek] = useState(defaultWeek())
   const [tab, setTab] = useState<'mapa' | 'miembros'>('mapa')
   const [selected, setSelected] = useState<string | null>(null)
   const v = useGroupView(codigo, week)

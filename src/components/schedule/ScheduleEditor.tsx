@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { activeTemplates, blockApplies, toLabel, weekParity } from '../../lib/schedule/availability'
-import { getDateForDay } from '../../lib/weeks'
+import { getDateForDay, todayISO } from '../../lib/weeks'
 import type { Block, DayKey, Template } from '../../lib/schedule/types'
 import { useMySchedule, useScheduleActions } from '../../hooks/useSchedules'
 import BlockSheet, { type BlockDraft } from './BlockSheet'
@@ -42,7 +42,8 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
   const [error, setError] = useState('')
   const creatingDefault = useRef(false)
   const dayCount = useDayCount()
-  const todayIdx = DAYS.findIndex((d) => getDateForDay(weekStart, d.key) === new Date().toISOString().slice(0, 10))
+  const today = todayISO()
+  const todayIdx = DAYS.findIndex((d) => getDateForDay(weekStart, d.key) === today)
   const [startIdx, setStartIdx] = useState(0)
   const maxStart = 7 - dayCount
   const first = Math.min(startIdx, maxStart)
@@ -60,8 +61,8 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
 
   // En móvil se abre en el día de hoy si la semana visible es la actual.
   useEffect(() => {
-    if (todayIdx >= 0) setStartIdx(Math.max(0, Math.min(todayIdx, 7 - dayCount)))
-    else setStartIdx(0)
+    // Se abre en hoy si es entre semana; si no, desde el lunes
+    setStartIdx(todayIdx >= 0 && todayIdx <= 4 ? Math.min(todayIdx, 7 - dayCount) : 0)
   }, [weekStart, dayCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const parity = weekParity(weekStart)
@@ -172,7 +173,7 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
                   dayKey={d.key}
                   label={d.short}
                   date={getDateForDay(weekStart, d.key)}
-                  isToday={getDateForDay(weekStart, d.key) === new Date().toISOString().slice(0, 10)}
+                  isToday={getDateForDay(weekStart, d.key) === today}
                   blocks={blocksByDay[d.key]}
                   from={from}
                   to={to}

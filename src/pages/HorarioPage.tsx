@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { getWeekStart, resolveScheduleForWeek } from '../lib/weeks'
+import { defaultWeek, resolveScheduleForWeek } from '../lib/weeks'
 import { intervalsOverlap } from '../lib/timeSlots'
 import { useGroupView } from '../hooks/useGroupView'
 import { useSaveOverride } from '../hooks/useGroupData'
@@ -11,7 +11,7 @@ import WeekNavigator from '../components/WeekNavigator'
 // Pestaña «Horario». Con la migración 0005: editor por bloques. Sin ella: la rejilla antigua.
 export default function HorarioPage() {
   const codigo = decodeURIComponent(useParams().codigo ?? '')
-  const [week, setWeek] = useState(getWeekStart(new Date()))
+  const [week, setWeek] = useState(defaultWeek())
   const v = useGroupView(codigo, week)
   const saveOverride = useSaveOverride(codigo, v.user.id)
 

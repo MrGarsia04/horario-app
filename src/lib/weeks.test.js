@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getWeekStart, addWeeks, getDateForDay, formatWeekLabel, resolveScheduleForWeek } from './weeks'
+import { getWeekStart, addWeeks, getDateForDay, formatWeekLabel, resolveScheduleForWeek, todayISO, defaultWeek, formatWeekLabelShort } from './weeks'
 
 describe('getWeekStart', () => {
   it('devuelve el lunes para cualquier día de la semana', () => {
@@ -73,5 +73,25 @@ describe('resolveScheduleForWeek', () => {
   })
   it('tolera base y overrides nulos', () => {
     expect(resolveScheduleForWeek(null, null, '2026-11-09').schedule).toEqual([])
+  })
+})
+
+describe('todayISO / defaultWeek / formatWeekLabelShort', () => {
+  it('todayISO usa la fecha local', () => {
+    expect(todayISO(new Date(2026, 10, 15, 23, 59))).toBe('2026-11-15')
+    expect(todayISO(new Date(2026, 0, 1, 0, 1))).toBe('2026-01-01')
+  })
+  it('defaultWeek: entre semana es la actual', () => {
+    expect(defaultWeek(new Date(2026, 10, 11))).toBe('2026-11-09') // miércoles
+    expect(defaultWeek(new Date(2026, 10, 9))).toBe('2026-11-09') // lunes
+    expect(defaultWeek(new Date(2026, 10, 13))).toBe('2026-11-09') // viernes
+  })
+  it('defaultWeek: en fin de semana salta a la siguiente', () => {
+    expect(defaultWeek(new Date(2026, 10, 14))).toBe('2026-11-16') // sábado
+    expect(defaultWeek(new Date(2026, 10, 15))).toBe('2026-11-16') // domingo
+  })
+  it('formatWeekLabelShort cabe en una línea y sirve para meses distintos', () => {
+    expect(formatWeekLabelShort('2026-11-09')).toMatch(/^9–15 nov/)
+    expect(formatWeekLabelShort('2026-11-30')).toMatch(/^30 nov – 6 dic/)
   })
 })

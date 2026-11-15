@@ -61,3 +61,29 @@ export function resolveScheduleForWeek(baseSchedule, overrides, weekStart) {
     effectiveFrom: latest.week_start,
   }
 }
+
+// Fecha local de hoy como 'YYYY-MM-DD' (no UTC: cerca de medianoche toISOString() daría otro día).
+export function todayISO(now = new Date()) {
+  const p = (n) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
+}
+
+// Semana que se abre por defecto: la actual, salvo en fin de semana, que ya mira a la siguiente
+// (lo que interesa es lo que viene, no lo que ya pasó).
+export function defaultWeek(now = new Date()) {
+  const dow = now.getDay() // 0 domingo, 6 sábado
+  const week = getWeekStart(now)
+  return dow === 0 || dow === 6 ? addWeeks(week, 1) : week
+}
+
+// «9–15 nov» o «30 nov – 6 dic»; con el año solo si no es el actual (cabe en una línea en el móvil)
+export function formatWeekLabelShort(weekStart) {
+  const start = parseISODate(weekStart)
+  const end = new Date(start)
+  end.setUTCDate(end.getUTCDate() + 6)
+  const month = (d) => d.toLocaleDateString('es-ES', { month: 'short', timeZone: 'UTC' }).replace('.', '')
+  const year = start.getUTCFullYear() !== new Date().getFullYear() ? ` ${start.getUTCFullYear()}` : ''
+  return start.getUTCMonth() === end.getUTCMonth()
+    ? `${start.getUTCDate()}–${end.getUTCDate()} ${month(end)}${year}`
+    : `${start.getUTCDate()} ${month(start)} – ${end.getUTCDate()} ${month(end)}${year}`
+}

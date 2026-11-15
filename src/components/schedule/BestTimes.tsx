@@ -36,7 +36,7 @@ export default function BestTimes({ members, weekStart, groupCode, config, onCre
           <span className="sr-only">Duración</span>
           <select value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="field !min-h-[36px] !w-auto !py-1 text-xs" aria-label="Duración del plan">
             {DURATIONS.map((d) => (
-              <option key={d} value={d}>{d >= 60 ? `${d / 60} h${d % 60 ? ` ${d % 60} min` : ''}` : `${d} min`}</option>
+              <option key={d} value={d}>{d >= 60 ? `${Math.floor(d / 60)} h${d % 60 ? ` ${d % 60} min` : ''}` : `${d} min`}</option>
             ))}
           </select>
         </label>
