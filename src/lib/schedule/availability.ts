@@ -79,7 +79,7 @@ export function activeTemplates(templates: Template[], date: string): Template[]
   return templates.filter((t) => t.is_active && inRange(date, t.active_from, t.active_to))
 }
 
-function blockApplies(b: Block, date: string, groupCode: string | null, parity: 'a' | 'b'): boolean {
+export function blockApplies(b: Block, date: string, groupCode: string | null, parity: 'a' | 'b'): boolean {
   if (b.group_code && b.group_code !== groupCode) return false
   if (b.day !== dayKeyOf(date)) return false
   if (!inRange(date, b.valid_from, b.valid_to)) return false
