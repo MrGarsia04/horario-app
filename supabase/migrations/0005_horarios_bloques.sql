@@ -141,68 +141,86 @@ grant execute on function public.group_schedules(text), public.set_schedule_visi
 revoke all on public.schedule_templates, public.schedule_blocks, public.schedule_exceptions from anon;
 
 -- ---------------------------------------------------------------------------
--- Conversión de los horarios antiguos (aditiva e idempotente: solo a quien aún no tiene plantillas)
---   schedules.busy_slots          -> horario habitual
---   schedule_overrides (por semana, se arrastra hacia delante y REEMPLAZA todo el horario)
---                                 -> una plantilla por tramo de fechas (active_from / active_to)
--- Cada bloque queda ligado a su grupo (group_code) para conservar exactamente lo que se veía.
--- ---------------------------------------------------------------------------
-create or replace function pg_temp.legacy_to_template(
-  p_user uuid, p_group text, p_name text, p_from date, p_to date, p_slots jsonb
-) returns void language plpgsql as $$
-declare v_tpl uuid; v_item jsonb; v_s int; v_e int;
+
+-- Conversión de los horarios antiguos a UNA sola capa «Mi horario» por persona.
+-- Criterio: el horario que la persona tiene HOY (para cada grupo: el último override con
+-- week_start <= esta semana; si no hay, el horario habitual). Los overrides pasados NO crean
+-- capas (siguen en schedule_overrides, que no se toca). Empieza el lunes de esta semana, sin fin.
+-- Un override FUTURO (semana posterior a esta) sí se conserva, como capa «Mi horario desde <fecha>
+-- (grupo)» con sus fechas, y el horario de hoy de ese grupo termina el día anterior (valid_to).
+-- Cada bloque queda ligado a su grupo (group_code) para ver exactamente lo mismo que antes.
+create or replace function pg_temp.insertar_bloques(
+  p_layer uuid, p_user uuid, p_group text, p_slots jsonb, p_valid_to date, p_valid_from date default null
+) returns void language plpgsql as $f$
+declare v_item jsonb; v_s int; v_e int;
 begin
-  if p_slots is null or jsonb_typeof(p_slots) <> 'array' or jsonb_array_length(p_slots) = 0 then return; end if;
-  insert into public.schedule_templates (user_id, name, is_active, active_from, active_to)
-    values (p_user, left(p_name, 60), true, p_from, p_to) returning id into v_tpl;
+  if p_slots is null or jsonb_typeof(p_slots) <> 'array' then return; end if;
   for v_item in select * from jsonb_array_elements(p_slots) loop
     continue when (v_item ->> 'day') not in ('mon','tue','wed','thu','fri','sat','sun');
     v_s := split_part(v_item ->> 'start', ':', 1)::int * 60 + split_part(v_item ->> 'start', ':', 2)::int;
     v_e := split_part(v_item ->> 'end',   ':', 1)::int * 60 + split_part(v_item ->> 'end',   ':', 2)::int;
     continue when v_e <= v_s or v_s < 0 or v_e > 1440;
-    insert into public.schedule_blocks (template_id, user_id, group_code, day, start_min, end_min)
-      values (v_tpl, p_user, p_group, v_item ->> 'day', v_s, v_e);
+    insert into public.schedule_blocks (template_id, user_id, group_code, day, start_min, end_min, valid_from, valid_to)
+      values (p_layer, p_user, p_group, v_item ->> 'day', v_s, v_e, p_valid_from, p_valid_to);
   end loop;
-end $$;
+end $f$;
 
--- Usuarios a convertir (se calcula ANTES del bucle: al crear plantillas de un grupo no deben
--- quedar excluidos sus otros grupos).
-create temp table _usuarios_a_migrar as
-  select distinct x.user_id
-    from (select user_id from public.schedules union select user_id from public.schedule_overrides) x
-   where not exists (select 1 from public.schedule_templates t where t.user_id = x.user_id);
-
-do $$
+create or replace function pg_temp.convertir_usuario(p_user uuid, p_layer uuid)
+returns void language plpgsql as $f$
 declare
-  r record; v_prev_ws date; v_next date; o record; v_base jsonb; v_first_override date;
+  w date := date_trunc('week', current_date)::date;
+  g record; o record; v_slots jsonb; v_first_future date; v_fut uuid;
 begin
-  for r in
-    select distinct x.user_id, x.group_code
-      from (select user_id, group_code from public.schedules
-            union select user_id, group_code from public.schedule_overrides) x
-      join public.groups g on g.code = x.group_code
-     where x.user_id in (select user_id from _usuarios_a_migrar)
+  for g in
+    select distinct x.group_code
+      from (select group_code from public.schedules where user_id = p_user
+            union select group_code from public.schedule_overrides where user_id = p_user) x
+      join public.groups gr on gr.code = x.group_code
   loop
-    select busy_slots into v_base from public.schedules where user_id = r.user_id and group_code = r.group_code;
-    select min(week_start) into v_first_override
-      from public.schedule_overrides where user_id = r.user_id and group_code = r.group_code;
+    select min(week_start) into v_first_future from public.schedule_overrides
+     where user_id = p_user and group_code = g.group_code and week_start > w;
 
-    perform pg_temp.legacy_to_template(r.user_id, r.group_code, 'Mi horario (' || r.group_code || ')',
-      null, case when v_first_override is null then null else v_first_override - 1 end, v_base);
+    select busy_slots into v_slots from public.schedule_overrides
+     where user_id = p_user and group_code = g.group_code and week_start <= w
+     order by week_start desc limit 1;
+    if not found then
+      select busy_slots into v_slots from public.schedules where user_id = p_user and group_code = g.group_code;
+    end if;
+    perform pg_temp.insertar_bloques(p_layer, p_user, g.group_code, v_slots,
+      case when v_first_future is null then null else v_first_future - 1 end);
 
     for o in
-      select week_start, busy_slots,
-             lead(week_start) over (order by week_start) as next_ws
-        from public.schedule_overrides where user_id = r.user_id and group_code = r.group_code
+      select week_start, busy_slots, lead(week_start) over (order by week_start) as next_ws
+        from public.schedule_overrides
+       where user_id = p_user and group_code = g.group_code and week_start > w
        order by week_start
     loop
-      perform pg_temp.legacy_to_template(r.user_id, r.group_code,
-        'Mi horario desde ' || o.week_start || ' (' || r.group_code || ')',
-        o.week_start, case when o.next_ws is null then null else o.next_ws - 1 end, o.busy_slots);
+      if jsonb_typeof(o.busy_slots) = 'array' and jsonb_array_length(o.busy_slots) > 0 then
+        insert into public.schedule_templates (user_id, name, active_from, active_to)
+          values (p_user, left('Mi horario desde ' || o.week_start || ' (' || g.group_code || ')', 60), o.week_start,
+                  case when o.next_ws is null then null else o.next_ws - 1 end)
+          returning id into v_fut;
+        -- valid_from marca estas capas como «con fechas propias» (no se confunden con las de la conversión antigua)
+        perform pg_temp.insertar_bloques(v_fut, p_user, g.group_code, o.busy_slots, null, o.week_start);
+      end if;
     end loop;
   end loop;
-end $$;
+end $f$;
 
-drop table _usuarios_a_migrar;
+do $$
+declare r record; v_layer uuid;
+begin
+  -- Solo a quien aún no tiene capas (idempotente). Se calcula antes de crear nada.
+  for r in
+    select distinct x.user_id
+      from (select user_id from public.schedules union select user_id from public.schedule_overrides) x
+     where not exists (select 1 from public.schedule_templates t where t.user_id = x.user_id)
+  loop
+    insert into public.schedule_templates (user_id, name, active_from)
+      values (r.user_id, 'Mi horario', date_trunc('week', current_date)::date)
+      returning id into v_layer;
+    perform pg_temp.convertir_usuario(r.user_id, v_layer);
+  end loop;
+end $$;
 
 notify pgrst, 'reload schema';

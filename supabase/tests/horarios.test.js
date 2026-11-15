@@ -10,6 +10,11 @@ const U1 = '00000000-0000-0000-0000-000000000001'
 const U2 = '00000000-0000-0000-0000-000000000002'
 const U3 = '00000000-0000-0000-0000-000000000003'
 
+const dayISO = (d) => d.toISOString().slice(0, 10)
+const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return dayISO(d) }
+// Lunes de la semana actual (la migración convierte «el horario de HOY»)
+const W0 = (() => { const d = new Date(); const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); t.setUTCDate(t.getUTCDate() - ((t.getUTCDay() + 6) % 7)); return dayISO(t) })()
+
 let db
 const q = (t, p) => db.query(t, p)
 // uid = id de PERFIL; la sesión usa el id de Auth enlazado (cuentas antiguas reclamadas)
@@ -65,11 +70,13 @@ beforeAll(async () => {
     ('uni',$1,'[{"day":"mon","start":"09:00","end":"10:30"},{"day":"mon","start":"10:30","end":"12:00"},{"day":"wed","start":"15:30","end":"17:00"}]'),
     ('piso',$1,'[{"day":"fri","start":"18:00","end":"20:00"}]'),
     ('uni',$2,'[{"day":"tue","start":"09:00","end":"10:30"}]')`, [U1, U2])
+  // Overrides en formato real, RELATIVOS a hoy: dos pasados, uno de esta semana y uno futuro (U1); uno pasado (U2)
   await q(`insert into schedule_overrides (group_code, user_id, week_start, busy_slots) values
-    ('uni',$1,'2026-11-16','[{"day":"mon","start":"12:00","end":"13:30"}]'),
-    ('uni',$1,'2026-11-30','[]'),
-    ('uni',$1,'2026-12-14','[{"day":"thu","start":"09:00","end":"10:00"}]'),
-    ('uni',$2,'2026-11-09','[{"day":"tue","start":"11:00","end":"12:00"}]')`, [U1, U2])
+    ('uni',$1,$3,'[{"day":"mon","start":"08:00","end":"09:00"}]'),
+    ('uni',$1,$4,'[]'),
+    ('uni',$1,$5,'[{"day":"mon","start":"12:00","end":"13:30"}]'),
+    ('uni',$1,$6,'[{"day":"thu","start":"09:00","end":"10:00"}]'),
+    ('uni',$2,$4,'[{"day":"tue","start":"11:00","end":"12:00"}]')`, [U1, U2, addDays(W0, -14), addDays(W0, -7), W0, addDays(W0, 14)])
   await db.exec(`alter default privileges in schema public grant all on tables to anon, authenticated;
     alter default privileges in schema public grant execute on functions to anon, authenticated;
     grant all on all tables in schema public to anon, authenticated;
@@ -85,29 +92,35 @@ beforeAll(async () => {
   await db.exec(sql('0005_horarios_bloques.sql'))
 })
 
-describe('0005: conversión de datos antiguos', () => {
+describe('0005: conversión de datos antiguos a UNA capa', () => {
   it('no borra nada de schedules ni schedule_overrides', async () => {
     expect((await q(`select count(*)::int n from schedules`)).rows[0].n).toBe(3)
-    expect((await q(`select count(*)::int n from schedule_overrides`)).rows[0].n).toBe(4)
+    expect((await q(`select count(*)::int n from schedule_overrides`)).rows[0].n).toBe(5)
   })
-  it('crea plantillas y bloques para quien tenía horario, y ninguna para quien no', async () => {
-    expect((await q(`select count(*)::int n from schedule_templates where user_id=$1`, [U1])).rows[0].n).toBeGreaterThan(0)
+  it('una sola capa «Mi horario» por persona (los overrides pasados NO crean capas), desde el lunes de esta semana y sin fin', async () => {
+    const r = (await q(`select name, to_char(active_from,'YYYY-MM-DD') f, active_to from schedule_templates where user_id=$1 order by name`, [U1])).rows
+    expect(r.map((x) => x.name)).toEqual(['Mi horario', `Mi horario desde ${addDays(W0, 14)} (uni)`]) // la 2.ª es el override FUTURO
+    expect(r[0]).toMatchObject({ f: W0, active_to: null })
+    const u2 = (await q(`select name from schedule_templates where user_id=$1`, [U2])).rows
+    expect(u2.map((x) => x.name)).toEqual(['Mi horario'])
     expect((await q(`select count(*)::int n from schedule_templates where user_id=$1`, [U3])).rows[0].n).toBe(0)
-    // 3 intervalos base uni + 1 base piso + 1 + 0 (vacío) + 1 de overrides = 6 bloques de U1
-    expect((await q(`select count(*)::int n from schedule_blocks where user_id=$1`, [U1])).rows[0].n).toBe(6)
+  })
+  it('lleva el horario que tiene HOY: el último override <= esta semana (o el habitual) y por grupo', async () => {
+    const hoy = (await q(`select b.group_code g, b.day, b.start_min s from schedule_blocks b join schedule_templates t on t.id = b.template_id where b.user_id=$1 and t.name = 'Mi horario' order by 1,2`, [U1])).rows
+    expect(hoy).toEqual([{ g: 'piso', day: 'fri', s: 1080 }, { g: 'uni', day: 'mon', s: 720 }]) // override de esta semana (12:00) y base de «piso»
+    const u2 = (await q(`select day, start_min s from schedule_blocks where user_id=$1`, [U2])).rows
+    expect(u2).toEqual([{ day: 'tue', s: 660 }]) // el override pasado manda sobre el habitual
   })
   it('es idempotente: aplicar de nuevo la parte de conversión no duplica', async () => {
     const before = (await q(`select count(*)::int n from schedule_blocks`)).rows[0].n
     const body = sql('0005_horarios_bloques.sql')
-    const start = body.indexOf('-- Conversión de los horarios antiguos')
-    const from = body.lastIndexOf('-- ----', start)
-    // volver a ejecutar SOLO la conversión (sin recrear tablas)
+    const from = body.lastIndexOf('-- ----', body.indexOf('-- Conversión de los horarios antiguos'))
     await db.exec(body.slice(from).replace(/^-- -+\n/, ''))
     expect((await q(`select count(*)::int n from schedule_blocks`)).rows[0].n).toBe(before)
   })
-  it('equivalencia: el modelo nuevo da los MISMOS ocupados que el antiguo, día a día (nov–dic 2026)', async () => {
+  it('equivalencia desde esta semana: el modelo nuevo da los MISMOS ocupados que el antiguo, día a día (200 días)', async () => {
     const dates = []
-    for (let d = new Date(Date.UTC(2026, 9, 26)); d < new Date(Date.UTC(2027, 0, 11)); d.setUTCDate(d.getUTCDate() + 1)) dates.push(d.toISOString().slice(0, 10))
+    for (let i = 0; i < 200; i++) dates.push(addDays(W0, i))
     for (const [u, g] of [[U1, 'uni'], [U1, 'piso'], [U2, 'uni']]) {
       const nuevo = await newModel(u)
       const viejo = await legacyModel(u, g)
