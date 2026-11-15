@@ -286,3 +286,49 @@ describe('capas: disponibilidad', () => {
     expect(busyIntervalsForDate(m, W2, null)).toHaveLength(0)
   })
 })
+
+// ---------- Franjas de 1 h / 30 min ----------
+import { cellAvailability } from './availability'
+
+describe('cellAvailability (franjas)', () => {
+  // A ocupado 09:30–10:00 (media hora); B ocupado 09:00–11:00; C libre todo
+  const A = member('A', { blocks: [block({ user_id: 'A', start_min: 570, end_min: 600 })] })
+  const B = member('B', { blocks: [block({ user_id: 'B', start_min: 540, end_min: 660 })] })
+  const C = member('C')
+  const win = { days: ['mon' as const], startMin: 540, endMin: 720 }
+
+  it('franja de 1 h: libres TODA la hora, solo parte y ocupados', () => {
+    const [mon] = cellAvailability([A, B, C], W1, null, win, 60)
+    const nueve = mon.cells[0] // 09:00–10:00
+    expect(nueve.full).toEqual(['C'])
+    expect(nueve.partial).toEqual([{ userId: 'A', freeMin: 30, freeRanges: [{ start: 540, end: 570 }, { start: 600, end: 600 }].filter((r) => r.end > r.start) }])
+    expect(nueve.busy).toEqual(['B'])
+  })
+  it('los tramos libres parciales son correctos (hueco en medio)', () => {
+    const X = member('X', { blocks: [block({ user_id: 'X', start_min: 570, end_min: 600 })] })
+    const [mon] = cellAvailability([X], W1, null, win, 60)
+    expect(mon.cells[0].partial[0].freeRanges).toEqual([{ start: 540, end: 570 }])
+    const Y = member('Y', { blocks: [block({ user_id: 'Y', start_min: 560, end_min: 580 })] })
+    expect(cellAvailability([Y], W1, null, win, 60)[0].cells[0].partial[0].freeRanges).toEqual([{ start: 540, end: 560 }, { start: 580, end: 600 }])
+  })
+  it('la misma persona pasa de «parcial» a «libre» al afinar a 30 min', () => {
+    const [m60] = cellAvailability([A], W1, null, win, 60)
+    const [m30] = cellAvailability([A], W1, null, win, 30)
+    expect(m60.cells[0].partial.map((p) => p.userId)).toEqual(['A'])
+    expect(m30.cells[0].full).toEqual(['A']) // 09:00–09:30 libre
+    expect(m30.cells[1].busy).toEqual(['A']) // 09:30–10:00 ocupado
+  })
+  it('hay una franja por cada tramo de la ventana (y la última se recorta)', () => {
+    const [mon] = cellAvailability([C], W1, null, { days: ['mon'], startMin: 540, endMin: 690 }, 60)
+    expect(mon.cells.map((c) => [c.startMin, c.endMin])).toEqual([[540, 600], [600, 660], [660, 690]])
+  })
+  it('cada miembro cae en exactamente una categoría', () => {
+    const [mon] = cellAvailability([A, B, C], W1, null, win, 60)
+    for (const c of mon.cells) expect(c.full.length + c.partial.length + c.busy.length).toBe(3)
+  })
+  it('mezcla modelo antiguo y bloques', () => {
+    const L = member('L', { mode: 'legacy', legacyBase: [{ day: 'mon', start: '09:00', end: '09:45' }] })
+    const [mon] = cellAvailability([L], W1, null, win, 60)
+    expect(mon.cells[0].partial[0]).toMatchObject({ userId: 'L', freeMin: 15 })
+  })
+})

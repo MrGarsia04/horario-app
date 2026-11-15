@@ -170,3 +170,15 @@ export function useMyVisibility(groupCode: string | null, userId: string) {
     },
   })
 }
+
+// Una sola petición «crear capa por defecto» a la vez, aunque haya varias pantallas o el modo estricto de React
+// monte dos veces (antes eso llegó a crear decenas de capas). La base además lo garantiza con un bloqueo.
+let ensuring: Promise<unknown> | null = null
+export function ensureDefaultLayer(): Promise<unknown> {
+  if (!ensuring) {
+    ensuring = Promise.resolve(supabase.rpc('ensure_default_layer')).finally(() => {
+      ensuring = null
+    })
+  }
+  return ensuring
+}

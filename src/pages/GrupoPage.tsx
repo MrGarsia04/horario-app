@@ -3,8 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { defaultWeek } from '../lib/weeks'
 import { useGroupView } from '../hooks/useGroupView'
 import GroupHeatmap from '../components/GroupHeatmap'
-import GroupHeatmap15 from '../components/schedule/GroupHeatmap15'
-import BestTimes from '../components/schedule/BestTimes'
+import AvailabilityMap from '../components/schedule/AvailabilityMap'
 import MemberList from '../components/MemberList'
 import WeekNavigator from '../components/WeekNavigator'
 import ScheduleGrid from '../components/ScheduleGrid'
@@ -20,10 +19,6 @@ export default function GrupoPage() {
   const [tab, setTab] = useState<'mapa' | 'miembros'>('mapa')
   const [selected, setSelected] = useState<string | null>(null)
   const v = useGroupView(codigo, week)
-
-  function createPlan(p: { date: string; startTime: string; endTime: string; inviteeIds: string[] }) {
-    navigate('/planes', { state: { newPlan: { title: '', date: p.date, startTime: p.startTime, endTime: p.endTime, inviteeIds: p.inviteeIds.filter((id) => id !== v.user.id) } } })
-  }
 
   if (v.modelLoading || v.membersLoading) return <p className="text-sm text-board-cream/50">Cargando…</p>
 
@@ -42,15 +37,18 @@ export default function GrupoPage() {
         <div className="mt-4"><EmptyState title="Aquí falta gente" text="Invita a tus amigos con el código del grupo (en Ajustes → Administrar el grupo) para ver cuándo coincidís." /></div>
       ) : v.blockModel ? (
         <div className="mt-4 space-y-4">
-          {!v.scheduleLoading && <BestTimes members={v.scheduleMembers} weekStart={week} groupCode={codigo} config={v.groupConfig} onCreatePlan={createPlan} />}
+          <button onClick={() => navigate('/planes')} className="card flex w-full items-center justify-between text-left hover:border-board-amber/50">
+            <span className="text-sm"><span className="font-medium">¿Quedamos?</span> <span className="text-board-cream/60">Mira el mejor momento en Planes</span></span>
+            <span className="text-board-amber" aria-hidden="true">›</span>
+          </button>
           <WeekNavigator weekStart={week} onChange={setWeek} statusText={null} />
           <MemberList members={v.resolvedMembers} selected={selected} onSelect={setSelected} />
           {v.scheduleLoading ? (
             <p className="text-sm text-board-cream/50">Cargando horarios…</p>
           ) : selected ? (
-            <GroupHeatmap15 single config={v.groupConfig} members={selectedSchedule} weekStart={week} groupCode={codigo} myUserId={v.user.id} highlightDayKey={v.birthdayDayKey} />
+            <AvailabilityMap single config={v.groupConfig} members={selectedSchedule} weekStart={week} groupCode={codigo} myUserId={v.user.id} highlightDayKey={v.birthdayDayKey} />
           ) : (
-            <GroupHeatmap15 config={v.groupConfig} members={v.scheduleMembers} weekStart={week} groupCode={codigo} myUserId={v.user.id} highlightDayKey={v.birthdayDayKey} />
+            <AvailabilityMap config={v.groupConfig} members={v.scheduleMembers} weekStart={week} groupCode={codigo} myUserId={v.user.id} highlightDayKey={v.birthdayDayKey} />
           )}
         </div>
       ) : (

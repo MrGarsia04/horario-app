@@ -238,3 +238,65 @@ export function bestSlots(
   }
   return picked
 }
+
+
+// ---------- mapa de calor por franjas (1 h / 30 min) ----------
+export interface CellMember {
+  userId: string
+  /** minutos libres dentro de la franja */
+  freeMin: number
+  /** tramos libres dentro de la franja (para explicar «libre solo de 9:00 a 9:30») */
+  freeRanges: Interval[]
+}
+export interface Cell {
+  startMin: number
+  endMin: number
+  /** libres TODA la franja */
+  full: string[]
+  /** libres solo una parte */
+  partial: CellMember[]
+  /** ocupados toda la franja */
+  busy: string[]
+}
+export interface DayCells {
+  day: DayKey
+  date: string
+  cells: Cell[]
+}
+
+function freeWithin(busy: Interval[], start: number, end: number): Interval[] {
+  let free: Interval[] = [{ start, end }]
+  for (const b of busy) free = subtractInterval(free, b)
+  return free
+}
+
+/**
+ * Disponibilidad por franjas de `step` minutos (60 por defecto) calculada sobre los MINUTOS reales:
+ * `full` = libres durante toda la franja; `partial` = libres solo parte (con sus tramos); `busy` = ocupados toda la franja.
+ */
+export function cellAvailability(
+  members: MemberSchedule[],
+  weekStart: string,
+  groupCode: string | null,
+  win: ViewWindow,
+  step = 60
+): DayCells[] {
+  return win.days.map((day) => {
+    const date = getDateForDay(weekStart, day)
+    const busyByUser = members.map((m) => ({ id: m.userId, busy: busyIntervalsForDate(m, date, groupCode) }))
+    const cells: Cell[] = []
+    for (let s = win.startMin; s < win.endMin; s += step) {
+      const e = Math.min(s + step, win.endMin)
+      const cell: Cell = { startMin: s, endMin: e, full: [], partial: [], busy: [] }
+      for (const u of busyByUser) {
+        const ranges = freeWithin(u.busy, s, e)
+        const freeMin = ranges.reduce((acc, r) => acc + (r.end - r.start), 0)
+        if (freeMin === e - s) cell.full.push(u.id)
+        else if (freeMin > 0) cell.partial.push({ userId: u.id, freeMin, freeRanges: ranges })
+        else cell.busy.push(u.id)
+      }
+      cells.push(cell)
+    }
+    return { day, date, cells }
+  })
+}

@@ -4,11 +4,9 @@ import { updateUsername, changePassword } from '../lib/auth'
 import { updateProfileInfo, fetchPublicProfile } from '../lib/profile'
 import FriendsPanel from './FriendsPanel'
 import PublicProfile from './PublicProfile'
-import { ThemePicker } from './ThemeToggle'
-import InstallButton from './InstallButton'
 import ContactEmailCard from './ContactEmailCard'
 
-export default function ProfileScreen({ userId, username, onUsernameChanged, onBack, onSignOut }) {
+export default function ProfileScreen({ userId, username, onUsernameChanged, onBack = undefined }) {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState('cuenta')
   const [viewingProfileId, setViewingProfileId] = useState(null)
@@ -211,13 +209,6 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
             )}
           </div>
 
-          <ThemePicker />
-
-          <div className="bg-board-panel border border-board-line rounded-md p-6">
-            <p className="text-sm text-board-cream/70 mb-3">Instalar la app</p>
-            <InstallButton className="items-start" installedMessage />
-          </div>
-
           <div className="bg-board-panel border border-board-line rounded-md overflow-hidden">
             <button
               onClick={() => setShowPasswordForm((s) => !s)}
@@ -260,13 +251,6 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
               </form>
             )}
           </div>
-
-          <button
-            onClick={onSignOut}
-            className="w-full bg-board-panel border border-board-line rounded-md px-6 py-4 text-sm text-left text-board-danger hover:brightness-110 transition"
-          >
-            Cerrar sesión
-          </button>
         </div>
       ) : (
         <FriendsPanel userId={userId} onViewProfile={setViewingProfileId} />

@@ -28,7 +28,8 @@ interface Props {
   layers: Template[]
   layerId: string
   saving: boolean
-  onSave: (v: Omit<Block, 'id' | 'user_id'> & { id?: string }) => void
+  /** `extraDays`: otros días en los que crear el mismo bloque (solo al crear uno nuevo) */
+  onSave: (v: Omit<Block, 'id' | 'user_id'> & { id?: string }, extraDays: DayKey[]) => void
   onDelete?: () => void
   onCopyTo?: (days: DayKey[]) => void
   onClose: () => void
@@ -36,13 +37,13 @@ interface Props {
 
 export default function BlockSheet({ draft, groupCode, layers, layerId: initialLayer, saving, onSave, onDelete, onCopyTo, onClose }: Props) {
   const [title, setTitle] = useState(draft.title ?? '')
-  const [day, setDay] = useState<DayKey>(draft.day)
+  const [days, setDays] = useState<DayKey[]>([draft.day])
   const [start, setStart] = useState(toLabel(draft.start_min))
   const [end, setEnd] = useState(toLabel(draft.end_min))
   const [layerId, setLayerId] = useState(initialLayer)
   // null = hereda el color de la capa
-  const [color, setColor] = useState<string | null>(draft.color ?? null)
-  const layer = layers.find((l) => l.id === layerId)
+  // El color lo da la capa; si el bloque ya tenía uno propio se conserva tal cual
+  const color = draft.color ?? null
   const [location, setLocation] = useState(draft.location ?? '')
   const [scope, setScope] = useState<'all' | 'group'>(draft.group_code ? 'group' : 'all')
   const [validFrom, setValidFrom] = useState(draft.valid_from ?? '')
@@ -57,10 +58,10 @@ export default function BlockSheet({ draft, groupCode, layers, layerId: initialL
     if (validFrom && validTo && validFrom > validTo) return setError('«Desde» no puede ser posterior a «hasta».')
     setError('')
     onSave({
-      id: draft.id, title: title.trim() || null, color, location: location.trim() || null, day,
+      id: draft.id, title: title.trim() || null, color, location: location.trim() || null, day: days[0] ?? draft.day,
       template_id: layerId, start_min: s, end_min: en, repeat: draft.repeat ?? 'weekly', group_code: scope === 'group' ? groupCode : null,
       valid_from: validFrom || null, valid_to: validTo || null,
-    })
+    }, days.slice(1))
   }
 
   return (
@@ -92,10 +93,10 @@ export default function BlockSheet({ draft, groupCode, layers, layerId: initialL
         )}
 
         <div>
-          <p className="mb-1.5 text-xs text-board-cream/60">Día</p>
+          <p className="mb-1.5 text-xs text-board-cream/60">{draft.id ? 'Día' : 'Día (puedes marcar varios)'}</p>
           <div className="flex flex-wrap gap-1.5">
             {DAYS.map((d) => (
-              <Chip key={d.key} active={day === d.key} onClick={() => setDay(d.key)}>{d.short}</Chip>
+              <Chip key={d.key} active={days.includes(d.key)} onClick={() => setDays((p) => (draft.id ? [d.key] : p.includes(d.key) ? (p.length > 1 ? p.filter((x) => x !== d.key) : p) : [...p, d.key]))}>{d.short}</Chip>
             ))}
           </div>
         </div>
@@ -103,18 +104,6 @@ export default function BlockSheet({ draft, groupCode, layers, layerId: initialL
         <div className="grid grid-cols-2 gap-3">
           <label className="text-xs text-board-cream/60">Desde<input type="time" step={900} value={start} onChange={(e) => setStart(e.target.value)} className="field mt-1" /></label>
           <label className="text-xs text-board-cream/60">Hasta<input type="time" step={900} value={end} onChange={(e) => setEnd(e.target.value)} className="field mt-1" /></label>
-        </div>
-
-        <div>
-          <p className="mb-1.5 text-xs text-board-cream/60">Color</p>
-          <div className="flex flex-wrap items-center gap-2.5" role="radiogroup" aria-label="Color">
-            <button type="button" role="radio" aria-checked={color === null} onClick={() => setColor(null)} className={`flex h-8 items-center gap-1.5 rounded-full border border-board-line px-2.5 text-xs ${color === null ? 'ring-2 ring-board-cream ring-offset-2 ring-offset-board-bg' : ''}`}>
-              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: layer?.color ?? COLORS[0] }} />De la capa
-            </button>
-            {COLORS.map((c) => (
-              <button key={c} type="button" role="radio" aria-checked={color === c} aria-label={`Color ${c}`} onClick={() => setColor(c)} style={{ backgroundColor: c }} className={`h-8 w-8 rounded-full ${color === c ? 'ring-2 ring-board-cream ring-offset-2 ring-offset-board-bg' : ''}`} />
-            ))}
-          </div>
         </div>
 
         {error && <p className="text-sm text-board-danger">{error}</p>}
@@ -141,7 +130,7 @@ export default function BlockSheet({ draft, groupCode, layers, layerId: initialL
             <div>
               <p className="mb-1.5 text-xs text-board-cream/60">Copiar este bloque a otros días</p>
               <div className="flex flex-wrap items-center gap-1.5">
-                {DAYS.filter((d) => d.key !== draft.day).map((d) => (
+                {DAYS.filter((d) => d.key !== days[0]).map((d) => (
                   <Chip key={d.key} active={copyDays.includes(d.key)} onClick={() => setCopyDays((p) => (p.includes(d.key) ? p.filter((x) => x !== d.key) : [...p, d.key]))}>{d.short}</Chip>
                 ))}
                 <Button variant="secondary" small disabled={copyDays.length === 0} onClick={() => onCopyTo(copyDays)}>Copiar</Button>

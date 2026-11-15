@@ -7,7 +7,6 @@ import Button from '../ui/Button'
 import { Chip } from '../ui/misc'
 import { ThemePicker } from '../components/ThemeToggle'
 import InstallButton from '../components/InstallButton'
-import ContactEmailCard from '../components/ContactEmailCard'
 import InviteBox from '../components/InviteBox'
 
 interface Props {
@@ -56,8 +55,6 @@ export default function SettingsSheet({ open, onClose, groupCode, onShowTutorial
           <Button variant="secondary" block onClick={() => { onClose(); navigate(`/g/${groupCode}/config`) }}>Ventana visible del grupo</Button>
         </Section>
       )}
-
-      <Section title="Correo de contacto"><ContactEmailCard title="Tu correo (opcional)" /></Section>
 
       <Section title="Ayuda y app">
         <div className="flex flex-col gap-2">

@@ -12,9 +12,11 @@ interface Props {
   groupCode: string
   config: { days: DayKey[]; startTime: string; endTime: string }
   onCreatePlan: (p: { date: string; startTime: string; endTime: string; inviteeIds: string[] }) => void
+  /** controles que se muestran bajo el título (grupo, semana…) */
+  extra?: React.ReactNode
 }
 
-export default function BestTimes({ members, weekStart, groupCode, config, onCreatePlan }: Props) {
+export default function BestTimes({ members, weekStart, groupCode, config, onCreatePlan, extra }: Props) {
   const [duration, setDuration] = useState(90)
   const win = useMemo(
     () => ({ days: config.days, startMin: toMinutes(config.startTime), endMin: toMinutes(config.endTime) }),
@@ -41,6 +43,8 @@ export default function BestTimes({ members, weekStart, groupCode, config, onCre
           </select>
         </label>
       </div>
+
+      {extra && <div className="mb-3">{extra}</div>}
 
       {best.length === 0 ? (
         <p className="text-sm text-board-cream/60">No hay ninguna franja futura de esa duración con al menos 2 personas libres. Prueba otra duración u otra semana.</p>

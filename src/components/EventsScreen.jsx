@@ -8,12 +8,18 @@ function formatEventDate(dateStr) {
   return d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
 }
 
-export default function EventsScreen({ userId, onBack, initialPlan }) {
+// `renderTop(openPlan)`: contenido extra arriba (p. ej. «mejor momento para quedar»); openPlan abre el formulario con datos.
+export default function EventsScreen({ userId, onBack = undefined, initialPlan = undefined, renderTop = undefined }) {
   const eventsQuery = useMyEvents(userId)
   const load = useRefreshSocial(userId)
   const events = eventsQuery.data ?? []
   const loading = eventsQuery.isLoading
   const [showForm, setShowForm] = useState(Boolean(initialPlan))
+  const [plan, setPlan] = useState(initialPlan)
+  const openPlan = (p) => {
+    setPlan(p)
+    setShowForm(true)
+  }
   const [editingEvent, setEditingEvent] = useState(null)
 
   async function handleRespond(eventId, status) {
@@ -29,6 +35,7 @@ export default function EventsScreen({ userId, onBack, initialPlan }) {
   }
 
   function closeForm() {
+    setPlan(undefined)
     setShowForm(false)
     setEditingEvent(null)
   }
@@ -50,7 +57,7 @@ export default function EventsScreen({ userId, onBack, initialPlan }) {
         <CreateEventForm
           userId={userId}
           event={editingEvent}
-          initial={editingEvent ? undefined : initialPlan}
+          initial={editingEvent ? undefined : plan}
           existingInviteeIds={editingEvent ? editingEvent.invitees.map((i) => i.userId) : []}
           onCreated={() => {
             closeForm()
@@ -59,12 +66,15 @@ export default function EventsScreen({ userId, onBack, initialPlan }) {
           onCancel={closeForm}
         />
       ) : (
+        <>
+        {renderTop?.(openPlan)}
         <button
           onClick={() => setShowForm(true)}
           className="w-full bg-board-amber text-board-onaccent font-semibold py-2 rounded hover:brightness-110 transition mb-6"
         >
           + Nuevo plan
         </button>
+        </>
       )}
 
       {!isFormOpen && (
