@@ -1,4 +1,4 @@
-# Panel de Horarios
+# Orden, por favor
 
 App para que un grupo de amigos meta sus horarios y vea de un vistazo cuándo
 coincide todo el mundo libre. Estética de panel de estación: casillas que se

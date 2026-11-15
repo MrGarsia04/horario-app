@@ -4,10 +4,10 @@ export default function WeekNavigator({ weekStart, onChange, statusText }) {
   const isCurrentWeek = weekStart === getWeekStart(new Date())
 
   return (
-    <div className="flex items-center justify-between mb-4">
+    <div className="flex items-center justify-between mb-3">
       <button
         onClick={() => onChange(addWeeks(weekStart, -1))}
-        className="w-8 h-8 flex items-center justify-center text-board-cream/60 hover:text-board-amber"
+        className="btn-ghost !px-2 text-xl"
         aria-label="Semana anterior"
       >
         ‹
@@ -30,7 +30,7 @@ export default function WeekNavigator({ weekStart, onChange, statusText }) {
 
       <button
         onClick={() => onChange(addWeeks(weekStart, 1))}
-        className="w-8 h-8 flex items-center justify-center text-board-cream/60 hover:text-board-amber"
+        className="btn-ghost !px-2 text-xl"
         aria-label="Semana siguiente"
       >
         ›

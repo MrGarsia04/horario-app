@@ -79,7 +79,7 @@ export default function AuthScreen() {
         <img src={bowUrl} alt="" aria-hidden="true" className="only-rosa auth-bow" />
 
         <form onSubmit={handleSubmit} className="w-full bg-board-panel border border-board-line rounded-md p-8">
-          <p className="font-mono text-board-amber text-xs tracking-wide mb-1">panel de horarios</p>
+          <p className="font-mono text-board-amber text-xs tracking-wide mb-1">Orden, por favor</p>
           <h1 className="text-2xl font-semibold mb-6">{mode === 'login' ? 'Inicia sesión' : mode === 'signup' ? 'Crea tu cuenta' : mode === 'forgot' ? 'Recupera tu contraseña' : 'Pon una contraseña nueva'}</h1>
 
           <label className="block text-sm text-board-cream/70 mb-1">Nombre de usuario</label>

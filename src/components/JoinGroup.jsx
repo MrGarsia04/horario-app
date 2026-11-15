@@ -17,7 +17,7 @@ export default function JoinGroup({ onJoin }) {
         className="w-full max-w-sm bg-board-panel border border-board-line rounded-md p-8"
       >
         <p className="font-mono text-board-amber text-xs tracking-wide mb-1">
-          panel de horarios
+          Orden, por favor
         </p>
         <h1 className="text-2xl font-semibold mb-6">Entra a tu grupo</h1>
 

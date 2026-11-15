@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { bestSlots, toLabel, toMinutes } from '../../lib/schedule/availability'
 import type { DayKey, MemberSchedule } from '../../lib/schedule/types'
 import { DAYS } from './constants'
+import Button from '../../ui/Button'
 
 const DURATIONS = [30, 45, 60, 90, 120, 180, 240]
 
@@ -28,12 +29,12 @@ export default function BestTimes({ members, weekStart, groupCode, config, onCre
   const names = Object.fromEntries(members.map((m) => [m.userId, m.name]))
 
   return (
-    <div className="mt-6 bg-board-panel border border-board-line rounded-md p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <p className="text-sm font-medium">Mejor momento para quedar (esta semana)</p>
+    <section className="card border-board-amber/40 bg-board-amber/5">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">Mejor momento para quedar</h2>
         <label className="text-xs text-board-cream/60">
-          Duración{' '}
-          <select value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="bg-board-bg border border-board-line rounded px-2 py-1 text-sm">
+          <span className="sr-only">Duración</span>
+          <select value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="field !min-h-[36px] !w-auto !py-1 text-xs" aria-label="Duración del plan">
             {DURATIONS.map((d) => (
               <option key={d} value={d}>{d >= 60 ? `${d / 60} h${d % 60 ? ` ${d % 60} min` : ''}` : `${d} min`}</option>
             ))}
@@ -42,7 +43,7 @@ export default function BestTimes({ members, weekStart, groupCode, config, onCre
       </div>
 
       {best.length === 0 ? (
-        <p className="text-sm text-board-cream/50">No hay ninguna franja futura de esa duración con al menos 2 personas libres dentro de la ventana del grupo. Prueba otra duración u otra semana.</p>
+        <p className="text-sm text-board-cream/60">No hay ninguna franja futura de esa duración con al menos 2 personas libres. Prueba otra duración u otra semana.</p>
       ) : (
         <ol className="space-y-2">
           {best.map((c, i) => {
@@ -50,25 +51,22 @@ export default function BestTimes({ members, weekStart, groupCode, config, onCre
             const dd = c.date.slice(8, 10) + '/' + c.date.slice(5, 7)
             const absent = members.filter((m) => !c.freeUserIds.includes(m.userId)).map((m) => m.name)
             return (
-              <li key={c.date + c.startMin} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <div>
-                  <span className="font-mono text-board-amber">{i + 1}.</span> {day.label} {dd} · {toLabel(c.startMin)}–{toLabel(c.endMin)}
-                  <span className="block text-xs text-board-cream/50">
-                    {c.freeUserIds.length} de {c.total} libres: {c.freeUserIds.map((id) => names[id]).join(', ')}
+              <li key={c.date + c.startMin} className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 ${i === 0 ? 'bg-board-panel ring-1 ring-board-free/50' : 'bg-board-panel/60'}`}>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{day.label} {dd} · {toLabel(c.startMin)}–{toLabel(c.endMin)}</p>
+                  <p className="truncate text-xs text-board-cream/60">
+                    <span className="text-board-free">● {c.freeUserIds.length} de {c.total} libres</span>
                     {absent.length > 0 && ` · no pueden: ${absent.join(', ')}`}
-                  </span>
+                  </p>
                 </div>
-                <button
-                  onClick={() => onCreatePlan({ date: c.date, startTime: toLabel(c.startMin), endTime: toLabel(c.endMin), inviteeIds: c.freeUserIds })}
-                  className="text-xs text-board-amber hover:brightness-110"
-                >
+                <Button variant={i === 0 ? 'primary' : 'secondary'} small onClick={() => onCreatePlan({ date: c.date, startTime: toLabel(c.startMin), endTime: toLabel(c.endMin), inviteeIds: c.freeUserIds })}>
                   Crear plan
-                </button>
+                </Button>
               </li>
             )
           })}
         </ol>
       )}
-    </div>
+    </section>
   )
 }

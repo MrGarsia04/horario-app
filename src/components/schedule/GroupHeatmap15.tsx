@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { groupAvailability, toLabel, toMinutes } from '../../lib/schedule/availability'
 import type { DayKey, MemberSchedule } from '../../lib/schedule/types'
 import { DAYS } from './constants'
+import Sheet from '../../ui/Sheet'
 
 // Colores del tema (variables CSS --heat-0 … --heat-4, también en el tema rosa).
 const STEPS = ['rgb(var(--heat-0))', 'rgb(var(--heat-1))', 'rgb(var(--heat-2))', 'rgb(var(--heat-3))', 'rgb(var(--heat-4))']
@@ -45,8 +46,8 @@ export default function GroupHeatmap15({ config, members, weekStart, groupCode, 
   return (
     <div>
       <div className="overflow-x-auto">
-        <div className="min-w-[560px]">
-          <div className="grid gap-px bg-board-line grid-board" style={{ gridTemplateColumns: `52px repeat(${grid.length}, 1fr)` }}>
+        <div>
+          <div className="grid gap-px bg-board-line grid-board" style={{ gridTemplateColumns: `40px repeat(${grid.length}, 1fr)` }}>
             <div className="bg-board-bg grid-corner" />
             {grid.map((g) => (
               <div key={g.day} className="bg-board-bg text-center font-mono text-xs tracking-wide text-board-cream/70 py-2">
@@ -68,15 +69,13 @@ export default function GroupHeatmap15({ config, members, weekStart, groupCode, 
                   return (
                     <button
                       key={g.day + row.startMin}
-                      onMouseEnter={() => setHover({ day: g.day, startMin: row.startMin })}
-                      onFocus={() => setHover({ day: g.day, startMin: row.startMin })}
                       onClick={() => setHover({ day: g.day, startMin: row.startMin })}
                       style={{ height: ROW_PX, backgroundColor: single ? (busy ? undefined : 'rgb(var(--board-panel))') : colorFor(ratio) }}
                       className={`relative border-0 transition-colors ${single && busy ? 'bg-board-teal cell-busy' : ''}`}
                       aria-label={`${dayLabel(g.day).label} ${toLabel(slot.startMin)}: ${slot.freeUserIds.length} de ${total} libres`}
                     >
                       {!single && imFree && slot.startMin % 60 === 0 && (
-                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-board-teal ring-1 ring-board-bg heat-dot" />
+                        <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-board-free ring-1 ring-board-bg" />
                       )}
                     </button>
                   )
@@ -87,26 +86,28 @@ export default function GroupHeatmap15({ config, members, weekStart, groupCode, 
         </div>
       </div>
 
-      <div className="mt-3 min-h-[2.5rem] text-sm text-board-cream/80 font-mono">
-        {hovered ? (
-          <>
-            <span className="text-board-cream/50">
-              {dayLabel(hover!.day).label} {toLabel(hovered.startMin)}–{toLabel(hovered.endMin)} ·{' '}
-            </span>
-            {single
-              ? free.length > 0 ? 'Libre' : 'Ocupado'
-              : free.length > 0 ? `Libres: ${free.map((id) => nameById[id]).join(', ')}` : 'Nadie libre'}
-            {!single && busyNames.length > 0 && free.length > 0 && <span className="block text-board-cream/40">Ocupados: {busyNames.join(', ')}</span>}
-          </>
+      <Sheet open={Boolean(hovered)} onClose={() => setHover(null)} title={hovered ? `${dayLabel(hover!.day).label} · ${toLabel(hovered.startMin)}–${toLabel(hovered.endMin)}` : ''}>
+        {hovered && (single ? (
+          <p className="pb-4 text-lg font-semibold">{free.length > 0 ? <span className="text-board-free">● Libre</span> : <span className="text-board-teal">● Ocupado</span>}</p>
         ) : (
-          'Pasa el ratón (o toca) una franja para ver quién está libre'
-        )}
-      </div>
+          <div className="space-y-4 pb-4">
+            <div>
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-board-free">Libres ({free.length})</p>
+              <p className="text-sm">{free.length > 0 ? free.map((id) => nameById[id]).join(', ') : 'Nadie'}</p>
+            </div>
+            {busyNames.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-board-teal">Ocupados ({busyNames.length})</p>
+                <p className="text-sm text-board-cream/80">{busyNames.join(', ')}</p>
+              </div>
+            )}
+          </div>
+        ))}
+      </Sheet>
 
       {!single && (
         <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-board-cream/50">
-          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-board-teal heat-dot" /> libre para ti (marca cada hora)</span>
-          <span>cuanto más intenso el color, más gente libre · cada fila son 15 min</span>
+          <span>Más intenso = más gente libre · toca una franja para ver quién · cada fila son 15 min</span>
         </div>
       )}
     </div>
