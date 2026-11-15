@@ -75,12 +75,12 @@ function ThemePreview({ id }) {
 }
 
 // Selector de tema con miniaturas (se usa en el perfil)
-export function ThemePicker() {
+export function ThemePicker({ compact = false }) {
   const [theme, setTheme] = useTheme()
 
   return (
-    <div className="bg-board-panel border border-board-line rounded-md p-6">
-      <p className="text-sm text-board-cream/70 mb-3">Apariencia</p>
+    <div className={compact ? '' : 'bg-board-panel border border-board-line rounded-md p-6'}>
+      {!compact && <p className="text-sm text-board-cream/70 mb-3">Apariencia</p>}
       <div role="radiogroup" aria-label="Tema de la aplicación" className="grid grid-cols-2 gap-3">
         {THEMES.map((t) => {
           const selected = theme === t.id

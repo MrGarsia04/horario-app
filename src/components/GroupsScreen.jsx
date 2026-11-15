@@ -1,123 +1,111 @@
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
-import ThemeToggle from './ThemeToggle'
-import InstallButton from './InstallButton'
+import { useState } from 'react'
+import { useMyGroups, useJoinGroup, useLeaveGroup, useCreateGroup } from '../hooks/useGroups'
+import Button from '../ui/Button'
+import { Card, EmptyState } from '../ui/misc'
 
-export default function GroupsScreen({ userId, username, onEnterGroup, onSignOut, onOpenProfile, onOpenEvents }) {
-  const [groups, setGroups] = useState([])
+// Lista de grupos. Unirse (con código de invitación) y crear van en tarjetas plegables
+// para que lo importante —tus grupos— se vea primero.
+export default function GroupsScreen({ userId, onEnterGroup }) {
+  const [joinOpen, setJoinOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const [newCode, setNewCode] = useState('')
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    loadGroups()
-  }, [])
-
-  async function loadGroups() {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('group_memberships')
-      .select('group_code')
-      .eq('user_id', userId)
-      .order('joined_at', { ascending: true })
-
-    if (!error) setGroups((data ?? []).map((r) => r.group_code))
-    setLoading(false)
-  }
+  const [createName, setCreateName] = useState('')
+  const [createError, setCreateError] = useState('')
+  const groupsQuery = useMyGroups(userId)
+  const joinGroup = useJoinGroup(userId)
+  const leaveGroup = useLeaveGroup(userId)
+  const createGroup = useCreateGroup(userId)
+  const groups = groupsQuery.data ?? []
 
   async function handleJoin(e) {
     e.preventDefault()
     setError('')
-    const code = newCode.trim().toLowerCase()
-    if (!code) return
-
-    const { error } = await supabase
-      .from('group_memberships')
-      .insert({ user_id: userId, group_code: code })
-
-    if (error) {
-      setError(error.code === '23505' ? 'Ya estás en ese grupo.' : error.message)
-      return
+    const invite = newCode.trim()
+    if (!invite) return
+    try {
+      await joinGroup.mutateAsync(invite)
+      setNewCode('')
+      setJoinOpen(false)
+    } catch (err) {
+      setError(err.message)
     }
-    setNewCode('')
-    loadGroups()
   }
 
-  async function handleLeave(code) {
-    const ok = window.confirm(
-      `¿Salir del grupo "${code}"? Podrás volver a entrar más tarde con el mismo código.`
-    )
-    if (!ok) return
-    await supabase.from('group_memberships').delete().eq('user_id', userId).eq('group_code', code)
-    loadGroups()
+  async function handleCreate(e) {
+    e.preventDefault()
+    setCreateError('')
+    const code = createName.trim().toLowerCase()
+    if (!code) return
+    try {
+      await createGroup.mutateAsync(code)
+      setCreateName('')
+      setCreateOpen(false)
+    } catch (err) {
+      setCreateError(err.message)
+    }
+  }
+
+  function handleLeave(code) {
+    const ok = window.confirm(`¿Salir del grupo "${code}"? Podrás volver a entrar con su código de invitación.`)
+    if (ok) leaveGroup.mutate(code)
   }
 
   return (
-    <div className="min-h-screen max-w-md mx-auto px-4 py-10">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold">{username}</h1>
-        <div className="flex items-center gap-4">
-          <button onClick={onOpenProfile} className="text-sm text-board-cream/50 hover:text-board-cream">
-            Perfil
-          </button>
-          <button onClick={onOpenEvents} className="text-sm text-board-cream/50 hover:text-board-cream">
-            Planes
-          </button>
-          <button onClick={onSignOut} className="text-sm text-board-cream/50 hover:text-board-cream">
-            Cerrar sesión
-          </button>
-        </div>
-      </div>
+    <div className="max-w-md mx-auto">
+      <h1 className="text-2xl font-semibold mb-4">Mis grupos</h1>
 
-      <p className="text-sm text-board-cream/50 mb-6">Tus grupos</p>
-
-      {loading ? (
+      {groupsQuery.isLoading ? (
         <p className="text-sm text-board-cream/50">Cargando…</p>
       ) : groups.length === 0 ? (
-        <p className="text-sm text-board-cream/50 mb-6">Todavía no estás en ningún grupo.</p>
+        <EmptyState
+          title="Todavía no estás en ningún grupo"
+          text="Únete con el código de invitación que te pase alguien, o crea uno nuevo para tus amigos."
+        />
       ) : (
-        <ul className="space-y-2 mb-8">
+        <ul className="space-y-2">
           {groups.map((code) => (
-            <li
-              key={code}
-              className="flex items-center justify-between bg-board-panel border border-board-line rounded px-4 py-3"
-            >
-              <span className="font-mono text-sm">{code}</span>
-              <div className="flex gap-3">
-                <button onClick={() => onEnterGroup(code)} className="text-sm text-board-amber hover:brightness-110">
-                  Entrar
-                </button>
-                <button onClick={() => handleLeave(code)} className="text-sm text-board-cream/40 hover:text-board-cream/70">
-                  Salir
-                </button>
-              </div>
+            <li key={code}>
+              <Card className="flex items-center justify-between !py-3">
+                <span className="font-mono text-sm">{code}</span>
+                <span className="flex items-center gap-1">
+                  <Button variant="ghost" small onClick={() => handleLeave(code)}>Salir</Button>
+                  <Button small onClick={() => onEnterGroup(code)}>Entrar</Button>
+                </span>
+              </Card>
             </li>
           ))}
         </ul>
       )}
 
-      <form onSubmit={handleJoin} className="bg-board-panel border border-board-line rounded-md p-6">
-        <label className="block text-sm text-board-cream/70 mb-1">Unirte a un grupo</label>
-        <input
-          value={newCode}
-          onChange={(e) => setNewCode(e.target.value)}
-          placeholder="p.ej. ing-4b"
-          className="w-full mb-3 bg-board-bg border border-board-line rounded px-3 py-2 outline-none focus:border-board-amber"
-        />
-        {error && <p className="text-sm text-board-danger mb-3">{error}</p>}
-        <button type="submit" className="w-full bg-board-amber text-board-onaccent font-semibold py-2 rounded hover:brightness-110 transition">
-          Unirme / crear grupo
-        </button>
-        <p className="text-xs text-board-cream/40 mt-3">
-          Si el código no existe todavía, se crea un grupo nuevo automáticamente.
-        </p>
-      </form>
+      <div className="mt-6 space-y-3">
+        <Card data-tour="join-group">
+          <button className="flex w-full items-center justify-between text-left text-sm font-medium" onClick={() => setJoinOpen((o) => !o)} aria-expanded={joinOpen}>
+            Unirme a un grupo <span className="text-board-cream/50">{joinOpen ? '−' : '+'}</span>
+          </button>
+          {joinOpen && (
+            <form onSubmit={handleJoin} className="mt-3 space-y-3">
+              <input value={newCode} onChange={(e) => setNewCode(e.target.value)} placeholder="Código de invitación" autoComplete="off" className="field font-mono" aria-label="Código de invitación" />
+              {error && <p className="text-sm text-board-danger">{error}</p>}
+              <Button type="submit" block>Unirme</Button>
+              <p className="text-xs text-board-cream/50">Pídele el código a quien administra el grupo.</p>
+            </form>
+          )}
+        </Card>
 
-      <div className="mt-8">
-        <div className="flex flex-wrap items-start justify-center gap-2">
-          <ThemeToggle />
-          <InstallButton />
-        </div>
+        <Card>
+          <button className="flex w-full items-center justify-between text-left text-sm font-medium" onClick={() => setCreateOpen((o) => !o)} aria-expanded={createOpen}>
+            Crear un grupo nuevo <span className="text-board-cream/50">{createOpen ? '−' : '+'}</span>
+          </button>
+          {createOpen && (
+            <form onSubmit={handleCreate} className="mt-3 space-y-3">
+              <input value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder="Nombre del grupo (p. ej. ing-4b)" className="field" aria-label="Nombre del grupo" />
+              {createError && <p className="text-sm text-board-danger">{createError}</p>}
+              <Button type="submit" variant="secondary" block>Crear grupo</Button>
+              <p className="text-xs text-board-cream/50">Serás el propietario y podrás compartir el código de invitación.</p>
+            </form>
+          )}
+        </Card>
       </div>
     </div>
   )

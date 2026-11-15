@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { loadFriendData } from '../lib/friends'
+import { useEffect, useRef, useState } from 'react'
+import { useFriendData } from '../hooks/useSocial'
 import { createEvent, updateEvent } from '../lib/events'
 
 const MONTHS = [
@@ -23,26 +23,31 @@ function resolveEventDate(day, monthIndex) {
   return `${yyyy}-${mm}-${dd}`
 }
 
-export default function CreateEventForm({ userId, event, existingInviteeIds = [], onCreated, onCancel }) {
+// `initial` (opcional) rellena un plan NUEVO: { title, date: 'YYYY-MM-DD', startTime, endTime, inviteeIds }
+export default function CreateEventForm({ userId, event, initial, existingInviteeIds = [], onCreated, onCancel }) {
   const isEditing = Boolean(event)
-  const initialDate = event ? new Date(event.event_date + 'T00:00:00') : new Date()
+  const initialDate = event ? new Date(event.event_date + 'T00:00:00') : initial?.date ? new Date(initial.date + 'T00:00:00') : new Date()
 
-  const [friends, setFriends] = useState([])
+  const friends = useFriendData(userId).data?.friends ?? []
   const [selectedIds, setSelectedIds] = useState(existingInviteeIds)
-  const [title, setTitle] = useState(event?.title ?? '')
+  const [title, setTitle] = useState(event?.title ?? initial?.title ?? '')
   const [description, setDescription] = useState(event?.description ?? '')
   const [day, setDay] = useState(initialDate.getDate())
   const [month, setMonth] = useState(initialDate.getMonth())
-  const [startTime, setStartTime] = useState(event?.start_time ?? '')
-  const [endTime, setEndTime] = useState(event?.end_time ?? '')
+  const [startTime, setStartTime] = useState(event?.start_time ?? initial?.startTime ?? '')
+  const [endTime, setEndTime] = useState(event?.end_time ?? initial?.endTime ?? '')
+
+  // Invitados sugeridos (los libres en esa franja): solo se pueden invitar amigos.
+  const suggestedApplied = useRef(false)
+  useEffect(() => {
+    if (suggestedApplied.current || !initial?.inviteeIds || friends.length === 0) return
+    suggestedApplied.current = true
+    const friendIds = new Set(friends.map((f) => f.userId))
+    setSelectedIds(initial.inviteeIds.filter((id) => friendIds.has(id)))
+  }, [friends, initial])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    loadFriendData(userId).then((result) => {
-      if (result.data) setFriends(result.data.friends)
-    })
-  }, [userId])
 
   function toggleFriend(id) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))

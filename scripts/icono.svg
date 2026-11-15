@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Icono de «Orden, por favor»: un gatito asomando por un hueco de un horario (una casilla encendida). -->
+  <rect width="512" height="512" rx="112" fill="#1B2430"/>
+  <g id="contenido">
+    <!-- cuadrícula 4×4 -->
+    <g fill="#2A3444">
+      <rect x="80" y="64" width="74" height="74" rx="14"/><rect x="172" y="64" width="74" height="74" rx="14"/><rect x="264" y="64" width="74" height="74" rx="14"/>
+      <rect x="80" y="156" width="74" height="74" rx="14"/><rect x="264" y="156" width="74" height="74" rx="14"/><rect x="356" y="156" width="74" height="74" rx="14"/>
+      <rect x="80" y="248" width="74" height="74" rx="14"/><rect x="356" y="248" width="74" height="74" rx="14"/>
+      <rect x="80" y="340" width="74" height="74" rx="14"/><rect x="356" y="340" width="74" height="74" rx="14"/>
+    </g>
+    <!-- casillas «ocupadas» -->
+    <g fill="#4C7C7C">
+      <rect x="172" y="156" width="74" height="74" rx="14"/>
+    </g>
+    <!-- casilla encendida -->
+    <rect x="356" y="64" width="74" height="74" rx="14" fill="#E8A33D"/>
+    <!-- el hueco -->
+    <rect x="172" y="248" width="166" height="166" rx="30" fill="#0E1319" stroke="#2A3444" stroke-width="4"/>
+    <!-- gatito -->
+    <polygon points="203,306 211,252 247,290" fill="#F2EFE9"/>
+    <polygon points="307,306 299,252 263,290" fill="#F2EFE9"/>
+    <polygon points="214,290 217,264 236,287" fill="#E58BA7"/>
+    <polygon points="296,290 293,264 274,287" fill="#E58BA7"/>
+    <circle cx="255" cy="338" r="64" fill="#F2EFE9"/>
+    <circle cx="231" cy="332" r="13" fill="#E8A33D"/>
+    <circle cx="279" cy="332" r="13" fill="#E8A33D"/>
+    <ellipse cx="231" cy="332" rx="4" ry="10" fill="#0E1319"/>
+    <ellipse cx="279" cy="332" rx="4" ry="10" fill="#0E1319"/>
+    <polygon points="248,350 262,350 255,360" fill="#E58BA7"/>
+    <path d="M255 360v6M255 366q-9 7-17 2M255 366q9 7 17 2" fill="none" stroke="#1B2430" stroke-width="3" stroke-linecap="round"/>
+    <path d="M196 352l-26-4M196 360l-26 6M314 352l26-4M314 360l26 6" stroke="#9AA3AF" stroke-width="3" stroke-linecap="round"/>
+    <!-- patitas agarradas al borde -->
+    <ellipse cx="217" cy="412" rx="24" ry="15" fill="#F2EFE9"/>
+    <ellipse cx="293" cy="412" rx="24" ry="15" fill="#F2EFE9"/>
+    <path d="M205 408v8M217 406v10M229 408v8M281 408v8M293 406v10M305 408v8" stroke="#C9C2B4" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+</svg>

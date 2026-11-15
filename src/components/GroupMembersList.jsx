@@ -1,27 +1,17 @@
-import { useEffect, useState } from 'react'
-import { loadFriendData, sendFriendRequest, respondToRequest } from '../lib/friends'
+import { useState } from 'react'
+import { useFriendData, useRefreshSocial } from '../hooks/useSocial'
+import { sendFriendRequest, respondToRequest } from '../lib/friends'
 
 export default function GroupMembersList({ members, myUserId }) {
-  const [friendStatus, setFriendStatus] = useState({})
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const friendQuery = useFriendData(myUserId)
+  const load = useRefreshSocial(myUserId)
+  const loading = friendQuery.isLoading
 
-  useEffect(() => {
-    load()
-  }, [])
-
-  async function load() {
-    setLoading(true)
-    const result = await loadFriendData(myUserId)
-    if (result.data) {
-      const status = {}
-      result.data.friends.forEach((f) => (status[f.userId] = 'friend'))
-      result.data.incoming.forEach((f) => (status[f.userId] = 'incoming'))
-      result.data.outgoing.forEach((f) => (status[f.userId] = 'outgoing'))
-      setFriendStatus(status)
-    }
-    setLoading(false)
-  }
+  const friendStatus = {}
+  friendQuery.data?.friends.forEach((f) => (friendStatus[f.userId] = 'friend'))
+  friendQuery.data?.incoming.forEach((f) => (friendStatus[f.userId] = 'incoming'))
+  friendQuery.data?.outgoing.forEach((f) => (friendStatus[f.userId] = 'outgoing'))
 
   async function handleAdd(member) {
     setError('')

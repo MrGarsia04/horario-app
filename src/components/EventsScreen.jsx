@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import { loadMyEvents, respondToEvent, deleteEvent } from '../lib/events'
+import { useState } from 'react'
+import { useMyEvents, useRefreshSocial } from '../hooks/useSocial'
+import { respondToEvent, deleteEvent } from '../lib/events'
 import CreateEventForm from './CreateEventForm'
 
 function formatEventDate(dateStr) {
@@ -7,22 +8,19 @@ function formatEventDate(dateStr) {
   return d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
 }
 
-export default function EventsScreen({ userId, onBack }) {
-  const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingEvent, setEditingEvent] = useState(null)
-
-  useEffect(() => {
-    load()
-  }, [])
-
-  async function load() {
-    setLoading(true)
-    const result = await loadMyEvents(userId)
-    if (result.data) setEvents(result.data)
-    setLoading(false)
+// `renderTop(openPlan)`: contenido extra arriba (p. ej. «mejor momento para quedar»); openPlan abre el formulario con datos.
+export default function EventsScreen({ userId, onBack = undefined, initialPlan = undefined, renderTop = undefined }) {
+  const eventsQuery = useMyEvents(userId)
+  const load = useRefreshSocial(userId)
+  const events = eventsQuery.data ?? []
+  const loading = eventsQuery.isLoading
+  const [showForm, setShowForm] = useState(Boolean(initialPlan))
+  const [plan, setPlan] = useState(initialPlan)
+  const openPlan = (p) => {
+    setPlan(p)
+    setShowForm(true)
   }
+  const [editingEvent, setEditingEvent] = useState(null)
 
   async function handleRespond(eventId, status) {
     await respondToEvent(eventId, userId, status)
@@ -37,6 +35,7 @@ export default function EventsScreen({ userId, onBack }) {
   }
 
   function closeForm() {
+    setPlan(undefined)
     setShowForm(false)
     setEditingEvent(null)
   }
@@ -44,18 +43,21 @@ export default function EventsScreen({ userId, onBack }) {
   const isFormOpen = showForm || Boolean(editingEvent)
 
   return (
-    <div className="min-h-screen max-w-md mx-auto px-4 py-10">
-      <div className="flex items-center justify-between mb-8">
+    <div className="max-w-md mx-auto">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold">Planes</h1>
-        <button onClick={onBack} className="text-sm text-board-cream/50 hover:text-board-cream">
-          Volver
-        </button>
+        {onBack && (
+          <button onClick={onBack} className="text-sm text-board-cream/50 hover:text-board-cream">
+            Volver
+          </button>
+        )}
       </div>
 
       {isFormOpen ? (
         <CreateEventForm
           userId={userId}
           event={editingEvent}
+          initial={editingEvent ? undefined : plan}
           existingInviteeIds={editingEvent ? editingEvent.invitees.map((i) => i.userId) : []}
           onCreated={() => {
             closeForm()
@@ -64,12 +66,15 @@ export default function EventsScreen({ userId, onBack }) {
           onCancel={closeForm}
         />
       ) : (
+        <>
+        {renderTop?.(openPlan)}
         <button
           onClick={() => setShowForm(true)}
           className="w-full bg-board-amber text-board-onaccent font-semibold py-2 rounded hover:brightness-110 transition mb-6"
         >
           + Nuevo plan
         </button>
+        </>
       )}
 
       {!isFormOpen && (

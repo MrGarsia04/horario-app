@@ -17,6 +17,8 @@
   --board-teal: 76 124 124; /* #4C7C7C */
   --board-onaccent: 27 36 48; /* texto sobre botones de acento */
   --board-danger: 248 113 113; /* #F87171 */
+  --board-free: 122 204 150; /* #7ACC96 verde claro: «libre» / coincidencia (distinto del teal de «ocupado») */
+  --board-sky: 125 170 225; /* #7DAAE1 azul suave: acciones secundarias e información */
 
   /* Mapa de calor del grupo: de "nadie libre" (0) a "todos libres" (4) */
   --heat-0: 19 25 32;
@@ -36,6 +38,17 @@
 body {
   font-family: var(--font-sans);
   color: rgb(var(--board-cream));
+  /* Zonas seguras (iPhone con notch / barra de gestos) */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
 }
 
 h1,
@@ -58,4 +71,45 @@ h3 {
 
 .flip-in {
   animation: flip-in 150ms ease-out;
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Componentes comunes (pensados para móvil: zonas táctiles de 44 px).   */
+/* Usan los colores del tema, así funcionan igual en «panel» y «rosa».    */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .btn {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-board-amber text-board-onaccent hover:brightness-110;
+  }
+  .btn-secondary {
+    @apply btn border border-board-sky/50 bg-board-sky/10 text-board-sky hover:bg-board-sky/20;
+  }
+  .btn-ghost {
+    @apply btn font-medium text-board-cream/70 hover:bg-board-line/40 hover:text-board-cream;
+  }
+  .btn-danger {
+    @apply btn border border-board-danger/40 text-board-danger hover:bg-board-danger/10;
+  }
+  .btn-sm {
+    @apply min-h-[36px] px-3 text-xs;
+  }
+  .card {
+    @apply rounded-xl border border-board-line bg-board-panel p-4;
+  }
+  .field {
+    @apply min-h-[44px] w-full rounded-lg border border-board-line bg-board-bg px-3 py-2 text-sm outline-none focus:border-board-amber;
+  }
+  .chip {
+    @apply inline-flex min-h-[36px] items-center whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium transition;
+  }
+  .chip-on {
+    @apply chip bg-board-amber text-board-onaccent;
+  }
+  .chip-off {
+    @apply chip bg-board-panel text-board-cream/70 hover:text-board-cream;
+  }
 }

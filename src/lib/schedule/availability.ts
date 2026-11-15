@@ -1,0 +1,331 @@
+import { getWeekStart, getDateForDay, resolveScheduleForWeek, addWeeks } from '../weeks'
+import type {
+  Block, Candidate, DayKey, Exception, Interval, MemberSchedule, Template, ViewWindow,
+} from './types'
+
+export const RESOLUTION = 15 // minutos por casilla del mapa de calor
+export const DAY_KEYS: DayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+
+// ---------- conversiones ----------
+export function toMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + (m || 0)
+}
+
+export function toLabel(min: number): string {
+  const h = String(Math.floor(min / 60)).padStart(2, '0')
+  const m = String(min % 60).padStart(2, '0')
+  return `${h}:${m}`
+}
+
+function parseDate(date: string): Date {
+  const [y, m, d] = date.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d))
+}
+
+/** Día de la semana ('mon'…'sun') de una fecha. */
+export function dayKeyOf(date: string): DayKey {
+  const dow = parseDate(date).getUTCDay() // 0 = domingo
+  return DAY_KEYS[(dow + 6) % 7]
+}
+
+/**
+ * Paridad de la semana para los horarios quincenales: se cuenta desde un lunes fijo
+ * (1970-01-05), así 'a' y 'b' se alternan siempre igual para todos los usuarios.
+ */
+export function weekParity(weekStart: string): 'a' | 'b' {
+  const days = Math.round(parseDate(weekStart).getTime() / 86_400_000)
+  const weeks = Math.round((days - 4) / 7) // 1970-01-05 es el día 4
+  return weeks % 2 === 0 ? 'a' : 'b'
+}
+
+function inRange(date: string, from: string | null, to: string | null): boolean {
+  return (!from || date >= from) && (!to || date <= to)
+}
+
+// ---------- intervalos ----------
+export function mergeIntervals(list: Interval[]): Interval[] {
+  const sorted = list
+    .filter((i) => i.end > i.start)
+    .map((i) => ({ ...i }))
+    .sort((a, b) => a.start - b.start)
+  const out: Interval[] = []
+  for (const iv of sorted) {
+    const last = out[out.length - 1]
+    if (last && iv.start <= last.end) last.end = Math.max(last.end, iv.end)
+    else out.push(iv)
+  }
+  return out
+}
+
+export function subtractInterval(list: Interval[], cut: Interval): Interval[] {
+  const out: Interval[] = []
+  for (const iv of list) {
+    if (cut.end <= iv.start || cut.start >= iv.end) out.push(iv)
+    else {
+      if (cut.start > iv.start) out.push({ start: iv.start, end: cut.start })
+      if (cut.end < iv.end) out.push({ start: cut.end, end: iv.end })
+    }
+  }
+  return out
+}
+
+export function overlaps(list: Interval[], start: number, end: number): boolean {
+  return list.some((iv) => iv.start < end && start < iv.end)
+}
+
+// ---------- capas ----------
+export function weeksBetween(fromWeekStart: string, toWeekStart: string): number {
+  return Math.round((parseDate(toWeekStart).getTime() - parseDate(fromWeekStart).getTime()) / (7 * 86_400_000))
+}
+
+/** ¿Le «toca» a la capa en esa semana? (cada N semanas contadas desde su semana ancla, hacia delante y hacia atrás) */
+export function layerAppliesOnWeek(t: Template, weekStart: string): boolean {
+  const n = t.every_n_weeks ?? 1
+  if (n <= 1 || !t.anchor_week) return true
+  const diff = weeksBetween(getWeekStart(t.anchor_week), weekStart)
+  return (((diff % n) + n) % n) === 0
+}
+
+/** Las próximas `count` semanas (lunes) en las que toca la capa, desde `fromWeek` incluida. */
+export function nextOccurrences(t: Template, fromWeek: string, count = 3): string[] {
+  const out: string[] = []
+  let w = getWeekStart(fromWeek)
+  for (let i = 0; i < 80 && out.length < count; i++) {
+    if (layerAppliesOnWeek(t, w)) out.push(w)
+    w = addWeeks(w, 1)
+  }
+  return out
+}
+
+/** Capas que cuentan en una fecha: activadas, dentro de sus fechas y con frecuencia que toque esa semana. */
+export function activeTemplates(templates: Template[], date: string): Template[] {
+  const week = getWeekStart(date)
+  return templates.filter((t) => t.is_active && inRange(date, t.active_from, t.active_to) && layerAppliesOnWeek(t, week))
+}
+
+// ---------- horario de una persona en una fecha ----------
+export function blockApplies(b: Block, date: string, groupCode: string | null, parity: 'a' | 'b'): boolean {
+  if (b.group_code && b.group_code !== groupCode) return false
+  if (b.day !== dayKeyOf(date)) return false
+  if (!inRange(date, b.valid_from, b.valid_to)) return false
+  // Repetición por bloque: solo para datos anteriores a las capas (0006 los convierte en capas)
+  if (b.repeat === 'biweekly_a' && parity !== 'a') return false
+  if (b.repeat === 'biweekly_b' && parity !== 'b') return false
+  return true
+}
+
+function applyExceptions(base: Interval[], exceptions: Exception[]): Interval[] {
+  let busy = base
+  // Primero las que liberan, luego las que ocupan: una ocupación puntual gana a una liberación.
+  for (const e of exceptions.filter((x) => x.kind === 'free')) {
+    busy = e.start_min == null || e.end_min == null ? [] : subtractInterval(busy, { start: e.start_min, end: e.end_min })
+  }
+  for (const e of exceptions.filter((x) => x.kind === 'busy')) {
+    busy = busy.concat({ start: e.start_min ?? 0, end: e.end_min ?? 24 * 60 })
+  }
+  return busy
+}
+
+/** Intervalos ocupados (en minutos, ya fusionados) de un miembro en una fecha concreta. */
+export function busyIntervalsForDate(member: MemberSchedule, date: string, groupCode: string | null): Interval[] {
+  const weekStart = getWeekStart(date)
+  const todays = member.exceptions.filter((e) => e.date === date && (!e.group_code || e.group_code === groupCode))
+  let busy: Interval[]
+
+  if (member.mode === 'legacy') {
+    const { schedule } = resolveScheduleForWeek(member.legacyBase, member.legacyOverrides, weekStart)
+    const day = dayKeyOf(date)
+    busy = (schedule as { day: DayKey; start: string; end: string }[])
+      .filter((iv) => iv.day === day)
+      .map((iv) => ({ start: toMinutes(iv.start), end: toMinutes(iv.end) }))
+    return mergeIntervals(applyExceptions(busy, todays))
+  }
+
+  const parity = weekParity(weekStart)
+  const perLayer: Interval[] = []
+  for (const layer of activeTemplates(member.templates, date)) {
+    const own = member.blocks
+      .filter((b) => b.template_id === layer.id && blockApplies(b, date, groupCode, parity))
+      .map((b) => ({ start: b.start_min, end: b.end_min }))
+    // Las excepciones dirigidas a una capa solo tocan sus bloques
+    perLayer.push(...applyExceptions(own, todays.filter((e) => e.template_id === layer.id)))
+  }
+  busy = mergeIntervals(perLayer)
+  return mergeIntervals(applyExceptions(busy, todays.filter((e) => !e.template_id)))
+}
+
+// ---------- mapa de calor ----------
+export interface SlotAvailability {
+  startMin: number
+  endMin: number
+  freeUserIds: string[]
+}
+export interface DayAvailability {
+  day: DayKey
+  date: string
+  slots: SlotAvailability[]
+}
+
+/** Disponibilidad de todos los miembros, casilla a casilla (15 min), para una semana. */
+export function groupAvailability(
+  members: MemberSchedule[],
+  weekStart: string,
+  groupCode: string | null,
+  win: ViewWindow,
+  resolution = RESOLUTION
+): DayAvailability[] {
+  return win.days.map((day) => {
+    const date = getDateForDay(weekStart, day)
+    const busyByUser = members.map((m) => ({ id: m.userId, busy: busyIntervalsForDate(m, date, groupCode) }))
+    const slots: SlotAvailability[] = []
+    for (let s = win.startMin; s < win.endMin; s += resolution) {
+      const e = Math.min(s + resolution, win.endMin)
+      slots.push({
+        startMin: s,
+        endMin: e,
+        freeUserIds: busyByUser.filter((u) => !overlaps(u.busy, s, e)).map((u) => u.id),
+      })
+    }
+    return { day, date, slots }
+  })
+}
+
+// ---------- mejor momento para quedar ----------
+/**
+ * Las mejores franjas de `durationMin` minutos: las que dejan libre a más gente durante TODA la franja.
+ * Orden: más gente libre, luego fecha/hora más temprana. Las propuestas no se solapan entre sí.
+ */
+export function bestSlots(
+  members: MemberSchedule[],
+  weekStart: string,
+  groupCode: string | null,
+  win: ViewWindow,
+  durationMin: number,
+  limit = 3,
+  resolution = RESOLUTION,
+  minFree = 2,
+  after?: { date: string; min: number } // no proponer nada anterior a este instante
+): Candidate[] {
+  const total = members.length
+  const all: Candidate[] = []
+
+  for (const day of win.days) {
+    const date = getDateForDay(weekStart, day)
+    const busyByUser = members.map((m) => ({ id: m.userId, busy: busyIntervalsForDate(m, date, groupCode) }))
+    for (let s = win.startMin; s + durationMin <= win.endMin; s += resolution) {
+      const e = s + durationMin
+      const free = busyByUser.filter((u) => !overlaps(u.busy, s, e)).map((u) => u.id)
+      if (after && (date < after.date || (date === after.date && s < after.min))) continue
+      if (free.length >= Math.min(minFree, total)) {
+        all.push({ date, day, startMin: s, endMin: e, freeUserIds: free, total })
+      }
+    }
+  }
+
+  all.sort(
+    (a, b) =>
+      b.freeUserIds.length - a.freeUserIds.length ||
+      (a.date < b.date ? -1 : a.date > b.date ? 1 : 0) ||
+      a.startMin - b.startMin
+  )
+
+  const picked: Candidate[] = []
+  for (const c of all) {
+    if (picked.length >= limit) break
+    const clash = picked.some((p) => p.date === c.date && p.startMin < c.endMin && c.startMin < p.endMin)
+    if (!clash) picked.push(c)
+  }
+  return picked
+}
+
+
+// ---------- mapa de calor por franjas (1 h / 30 min) ----------
+export interface CellMember {
+  userId: string
+  /** minutos libres dentro de la franja */
+  freeMin: number
+  /** tramos libres dentro de la franja (para explicar «libre solo de 9:00 a 9:30») */
+  freeRanges: Interval[]
+}
+export interface Cell {
+  startMin: number
+  endMin: number
+  /** libres TODA la franja */
+  full: string[]
+  /** libres solo una parte */
+  partial: CellMember[]
+  /** ocupados toda la franja */
+  busy: string[]
+}
+export interface DayCells {
+  day: DayKey
+  date: string
+  cells: Cell[]
+}
+
+function freeWithin(busy: Interval[], start: number, end: number): Interval[] {
+  let free: Interval[] = [{ start, end }]
+  for (const b of busy) free = subtractInterval(free, b)
+  return free
+}
+
+/**
+ * Disponibilidad por franjas de `step` minutos (60 por defecto) calculada sobre los MINUTOS reales:
+ * `full` = libres durante toda la franja; `partial` = libres solo parte (con sus tramos); `busy` = ocupados toda la franja.
+ */
+export function cellAvailability(
+  members: MemberSchedule[],
+  weekStart: string,
+  groupCode: string | null,
+  win: ViewWindow,
+  step = 60
+): DayCells[] {
+  return win.days.map((day) => {
+    const date = getDateForDay(weekStart, day)
+    const busyByUser = members.map((m) => ({ id: m.userId, busy: busyIntervalsForDate(m, date, groupCode) }))
+    const cells: Cell[] = []
+    for (let s = win.startMin; s < win.endMin; s += step) {
+      const e = Math.min(s + step, win.endMin)
+      const cell: Cell = { startMin: s, endMin: e, full: [], partial: [], busy: [] }
+      for (const u of busyByUser) {
+        const ranges = freeWithin(u.busy, s, e)
+        const freeMin = ranges.reduce((acc, r) => acc + (r.end - r.start), 0)
+        if (freeMin === e - s) cell.full.push(u.id)
+        else if (freeMin > 0) cell.partial.push({ userId: u.id, freeMin, freeRanges: ranges })
+        else cell.busy.push(u.id)
+      }
+      cells.push(cell)
+    }
+    return { day, date, cells }
+  })
+}
+
+
+// ---------- ventana visible automática ----------
+/** Franja social por defecto para proponer planes: todos los días, de 9:00 a 22:00. */
+export const SOCIAL_WINDOW: ViewWindow = { days: [...DAY_KEYS], startMin: 9 * 60, endMin: 22 * 60 }
+
+/**
+ * Ventana del mapa de disponibilidad calculada a partir de los horarios reales (ya no la fija nadie):
+ * lunes a viernes siempre, y sábado/domingo solo si alguien tiene algo; de 8:00 a 20:00 como mínimo,
+ * ampliada hasta una hora antes de la primera y una después de la última actividad de cualquiera (entre las 6:00 y las 24:00).
+ */
+export function autoWindow(members: MemberSchedule[], weekStart: string, groupCode: string | null): ViewWindow {
+  let min = Infinity
+  let max = 0
+  const used = new Set<DayKey>()
+  for (const day of DAY_KEYS) {
+    const date = getDateForDay(weekStart, day)
+    for (const m of members) {
+      for (const iv of busyIntervalsForDate(m, date, groupCode)) {
+        min = Math.min(min, iv.start)
+        max = Math.max(max, iv.end)
+        used.add(day)
+      }
+    }
+  }
+  const start = Math.max(6 * 60, Math.min(8 * 60, Number.isFinite(min) ? Math.floor(min / 60) * 60 - 60 : 8 * 60))
+  const end = Math.min(24 * 60, Math.max(20 * 60, max > 0 ? Math.ceil(max / 60) * 60 + 60 : 20 * 60))
+  return { days: DAY_KEYS.filter((d, i) => i < 5 || used.has(d)), startMin: start, endMin: end }
+}

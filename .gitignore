@@ -2,3 +2,13 @@ node_modules
 dist
 .env
 .DS_Store
+.env.*
+!.env.example
+.Rhistory
+*.code-workspace
+supabase/.temp
+.vercel
+capturas-fase-2
+capturas-fase-3b
+capturas-fase-3c
+capturas-fase-3d

@@ -8,11 +8,11 @@ export async function sendFriendRequest(myId, targetUsername) {
   const trimmed = targetUsername.trim()
   if (!trimmed) return { error: 'Escribe un nombre de usuario.' }
 
-  const { data: target, error: findErr } = await supabase
-    .from('profiles')
-    .select('id, username')
-    .eq('username', trimmed)
-    .maybeSingle()
+  // RLS impide leer perfiles de desconocidos: la búsqueda exacta va por función SQL.
+  const { data: found, error: findErr } = await supabase.rpc('find_user_by_username', {
+    p_username: trimmed,
+  })
+  const target = found?.[0]
 
   if (findErr || !target) return { error: 'No existe ningún usuario con ese nombre.' }
   if (target.id === myId) return { error: 'No puedes enviarte una solicitud a ti mismo.' }

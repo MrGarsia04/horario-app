@@ -1,6 +1,6 @@
 import { getDaysForConfig, buildRows, isBusyAt } from '../lib/timeSlots'
 
-export default function ScheduleGrid({ config, mySchedule, onToggle, readOnly = false, onClearAll, highlightDayKey }) {
+export default function ScheduleGrid({ config, mySchedule, onToggle = undefined, readOnly = false, onClearAll = undefined, highlightDayKey = undefined }) {
   const days = getDaysForConfig(config)
   const rows = buildRows(config)
 

@@ -20,7 +20,7 @@ export default function PublicProfile({ userId, onBack }) {
   }
 
   return (
-    <div className="min-h-screen max-w-md mx-auto px-4 py-10">
+    <div className="max-w-md mx-auto">
       <button onClick={onBack} className="text-sm text-board-cream/50 hover:text-board-cream mb-6">
         ‹ Volver
       </button>

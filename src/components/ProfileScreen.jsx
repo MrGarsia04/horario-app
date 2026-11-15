@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { updateUsername, changePassword } from '../lib/auth'
 import { updateProfileInfo, fetchPublicProfile } from '../lib/profile'
 import FriendsPanel from './FriendsPanel'
 import PublicProfile from './PublicProfile'
-import { ThemePicker } from './ThemeToggle'
-import InstallButton from './InstallButton'
+import ContactEmailCard from './ContactEmailCard'
 
-export default function ProfileScreen({ userId, username, onUsernameChanged, onBack, onSignOut }) {
+export default function ProfileScreen({ userId, username, onUsernameChanged, onBack = undefined }) {
+  const queryClient = useQueryClient()
   const [tab, setTab] = useState('cuenta')
   const [viewingProfileId, setViewingProfileId] = useState(null)
 
@@ -63,6 +64,7 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
       return
     }
     setInfoSuccess(true)
+    queryClient.invalidateQueries({ queryKey: ['profile', userId] })
   }
 
   async function handleChangePassword(e) {
@@ -75,7 +77,7 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
       return
     }
 
-    const result = await changePassword(userId, currentPassword, newPassword)
+    const result = await changePassword(currentPassword, newPassword)
     if (result.error) {
       setPasswordError(result.error)
       return
@@ -91,12 +93,14 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
   }
 
   return (
-    <div className="min-h-screen max-w-md mx-auto px-4 py-10">
-      <div className="flex items-center justify-between mb-8">
+    <div className="max-w-md mx-auto">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold">Tu perfil</h1>
-        <button onClick={onBack} className="text-sm text-board-cream/50 hover:text-board-cream">
-          Volver
-        </button>
+        {onBack && (
+          <button onClick={onBack} className="text-sm text-board-cream/50 hover:text-board-cream">
+            Volver
+          </button>
+        )}
       </div>
 
       <div className="flex gap-2 mb-6">
@@ -120,6 +124,7 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
 
       {tab === 'cuenta' ? (
         <div className="space-y-4">
+          <ContactEmailCard title="Correo de contacto" />
           <div className="bg-board-panel border border-board-line rounded-md p-6">
             <p className="text-sm text-board-cream/70 mb-2">Nombre de usuario</p>
             {editingName ? (
@@ -204,13 +209,6 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
             )}
           </div>
 
-          <ThemePicker />
-
-          <div className="bg-board-panel border border-board-line rounded-md p-6">
-            <p className="text-sm text-board-cream/70 mb-3">Instalar la app</p>
-            <InstallButton className="items-start" installedMessage />
-          </div>
-
           <div className="bg-board-panel border border-board-line rounded-md overflow-hidden">
             <button
               onClick={() => setShowPasswordForm((s) => !s)}
@@ -253,13 +251,6 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
               </form>
             )}
           </div>
-
-          <button
-            onClick={onSignOut}
-            className="w-full bg-board-panel border border-board-line rounded-md px-6 py-4 text-sm text-left text-board-danger hover:brightness-110 transition"
-          >
-            Cerrar sesión
-          </button>
         </div>
       ) : (
         <FriendsPanel userId={userId} onViewProfile={setViewingProfileId} />

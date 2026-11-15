@@ -3,7 +3,9 @@ import { ALL_DAYS } from '../lib/timeSlots'
 
 const SLOT_OPTIONS = [30, 45, 60, 75, 90, 105, 120]
 
-export default function GroupSettings({ config, onSave, onCancel }) {
+// blockModel = true: cada persona tiene su propio horario por bloques; aquí solo se elige la
+// ventana (días y horas) que se ve en el mapa del grupo. La rejilla fija (duración, descansos) ya no se usa.
+export default function GroupSettings({ config, onSave, onCancel, blockModel = false }) {
   const [days, setDays] = useState(config.days)
   const [startTime, setStartTime] = useState(config.startTime)
   const [endTime, setEndTime] = useState(config.endTime)
@@ -32,10 +34,11 @@ export default function GroupSettings({ config, onSave, onCancel }) {
 
   return (
     <div className="bg-board-panel border border-board-line rounded-md p-6 max-w-lg">
-      <h2 className="text-lg font-semibold mb-1">Configurar horario del grupo</h2>
+      <h2 className="text-lg font-semibold mb-1">{blockModel ? 'Ventana visible del grupo' : 'Configurar horario del grupo'}</h2>
       <p className="text-xs text-board-cream/50 mb-6">
-        Afecta a cómo veis la rejilla todos los del grupo. Los horarios ya marcados se
-        conservan aunque cambies esto.
+        {blockModel
+          ? 'Días y horas que se muestran en el mapa de disponibilidad. No cambia los horarios de nadie: cada persona tiene el suyo.'
+          : 'Afecta a cómo veis la rejilla todos los del grupo. Los horarios ya marcados se conservan aunque cambies esto.'}
       </p>
 
       <div className="grid grid-cols-2 gap-4 mb-4">
@@ -59,6 +62,8 @@ export default function GroupSettings({ config, onSave, onCancel }) {
         </div>
       </div>
 
+      {!blockModel && (
+        <>
       <label className="block text-sm text-board-cream/70 mb-1">Duración de cada clase</label>
       <select
         value={slotMinutes}
@@ -72,8 +77,11 @@ export default function GroupSettings({ config, onSave, onCancel }) {
         ))}
       </select>
 
+        </>
+      )}
+
       <label className="block text-sm text-board-cream/70 mb-2">Días</label>
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-6">
         {ALL_DAYS.map((day) => (
           <button
             key={day.key}
@@ -90,6 +98,8 @@ export default function GroupSettings({ config, onSave, onCancel }) {
         ))}
       </div>
 
+      {!blockModel && (
+        <>
       <label className="block text-sm text-board-cream/70 mb-2">
         Descansos fijos (siempre libres para todos)
       </label>
@@ -127,6 +137,8 @@ export default function GroupSettings({ config, onSave, onCancel }) {
         + Añadir descanso
       </button>
 
+        </>
+      )}
       <div className="flex gap-3">
         <button
           onClick={handleSave}

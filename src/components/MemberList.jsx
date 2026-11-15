@@ -1,9 +1,10 @@
-// members: [{ name, schedule }]. selected: nombre actualmente elegido o null (= vista de grupo)
+// members: [{ name, schedule }]. selected: nombre actualmente elegido o null (= vista de grupo).
+// En móvil las pastillas se desplazan en horizontal en lugar de ocupar varias filas.
 export default function MemberList({ members, selected, onSelect }) {
   return (
-    <div className="flex flex-wrap gap-2 mb-4">
+    <div className="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1" role="group" aria-label="Ver horario de">
       <Pill active={selected === null} onClick={() => onSelect(null)}>
-        Mapa del grupo
+        Todos
       </Pill>
       {members.map((m) => (
         <Pill key={m.name} active={selected === m.name} onClick={() => onSelect(m.name)}>
@@ -16,14 +17,7 @@ export default function MemberList({ members, selected, onSelect }) {
 
 function Pill({ active, onClick, children }) {
   return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-        active
-          ? 'bg-board-amber text-board-onaccent'
-          : 'bg-board-panel text-board-cream/70 hover:text-board-cream'
-      }`}
-    >
+    <button onClick={onClick} aria-pressed={active} className={active ? 'chip-on' : 'chip-off'}>
       {children}
     </button>
   )

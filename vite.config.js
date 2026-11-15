@@ -7,11 +7,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png'],
+      includeAssets: ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'favicon.svg', 'favicon-32.png'],
       manifest: {
-        name: 'Coincidimos',
-        short_name: 'Coincidimos',
-        description: 'Comparte tu horario con el grupo y ved cuándo coincidís libres.',
+        name: 'Orden, por favor',
+        short_name: 'Orden, por favor',
+        description: 'Comparte tu horario con tus amigos y mirad cuándo coincidís libres.',
         theme_color: '#1B2430',
         background_color: '#1B2430',
         display: 'standalone',
