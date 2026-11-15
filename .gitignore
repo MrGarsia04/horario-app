@@ -7,3 +7,4 @@ dist
 .Rhistory
 *.code-workspace
 supabase/.temp
+.vercel
