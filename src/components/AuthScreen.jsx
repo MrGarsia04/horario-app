@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { signIn, signUp, MIN_PASSWORD } from '../lib/auth'
 import { requestRecoveryCode, confirmRecovery } from '../lib/recuperar'
-import ThemeToggle from './ThemeToggle'
+import PasswordInput from '../ui/PasswordInput'
 import InstallButton from './InstallButton'
 import bowUrl from '../assets/rosa/bow.svg'
 
@@ -112,8 +112,7 @@ export default function AuthScreen() {
               <label className="block text-sm text-board-cream/70 mb-1">
                 {mode === 'code' ? 'Contraseña nueva' : 'Contraseña'}
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
@@ -127,8 +126,7 @@ export default function AuthScreen() {
           {mode === 'code' && (
             <>
               <label className="block text-sm text-board-cream/70 mb-1">Repite la contraseña nueva</label>
-              <input
-                type="password"
+              <PasswordInput
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 autoComplete="new-password"
@@ -140,8 +138,7 @@ export default function AuthScreen() {
           {mode === 'login' && needNewPassword && (
             <>
               <label className="block text-sm text-board-cream/70 mb-1 mt-2">Contraseña nueva</label>
-              <input
-                type="password"
+              <PasswordInput
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 autoComplete="new-password"
@@ -204,7 +201,6 @@ export default function AuthScreen() {
 
         <div className="mt-5">
           <div className="flex flex-wrap items-start justify-center gap-2">
-            <ThemeToggle />
             <InstallButton />
           </div>
         </div>

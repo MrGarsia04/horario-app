@@ -46,7 +46,7 @@ export function buildSteps(groupCode: string | null): TourStep[] {
     welcome,
     settings,
     { id: 'capas', path: `/g/${enc}`, target: 'tab-capas', title: 'Tu horario va por capas', text: 'Una capa es un conjunto de bloques que se repite con su frecuencia: «Clases» cada semana, «Prácticas» cada dos… Desde «Capas» las creas, editas y apagas.' },
-    { id: 'bloque', path: `/g/${enc}`, target: 'add-block', title: 'Añade un bloque', text: 'Pulsa «Bloque» o toca un hueco de la semana para añadir una clase o un turno. Puedes marcar varios días a la vez.' },
+    { id: 'bloque', path: `/g/${enc}`, target: 'add-block', title: 'Añade un bloque', text: 'Pulsa «Bloque» para añadir una clase o un turno; puedes marcar varios días a la vez. Para cambiar uno que ya tengas, tócalo en la semana.' },
     { id: 'mapa', path: `/g/${enc}/grupo`, target: 'map', title: 'El mapa del grupo', text: 'Cuanto más intenso el color, más gente libre; el número te dice cuántos. El borde verde marca cuándo estás libre tú. Toca una franja para ver quién.' },
     { id: 'planes', path: '/planes', target: 'best-times', title: 'Mejor momento para quedar', text: 'Elige la duración y la semana y te propongo los 3 mejores huecos. Con «Crear plan» invitas a quienes están libres.' },
     end,

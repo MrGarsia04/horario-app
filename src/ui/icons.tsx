@@ -15,3 +15,5 @@ export const IconLeft = (p: P) => (<svg {...base} {...p}><path d="m15 18-6-6 6-6
 export const IconRight = (p: P) => (<svg {...base} {...p}><path d="m9 18 6-6-6-6" /></svg>)
 export const IconClose = (p: P) => (<svg {...base} {...p}><path d="M6 6l12 12M18 6 6 18" /></svg>)
 export const IconRepeat = (p: P) => (<svg {...base} {...p}><path d="M17 2l4 4-4 4" /><path d="M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4" /><path d="M21 13v2a3 3 0 0 1-3 3H3" /></svg>)
+export const IconEye = (p: P) => (<svg {...base} {...p}><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>)
+export const IconEyeOff = (p: P) => (<svg {...base} {...p}><path d="M3 3l18 18" /><path d="M10.6 5.1A10.5 10.5 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 4.4-1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>)

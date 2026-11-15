@@ -164,12 +164,11 @@ export default function ScheduleEditor({ userId, groupCode, weekStart, onWeekCha
             today={today}
             freeDays={freeDays}
             initialDay={todayIdx >= 0 && todayIdx <= 4 ? Math.min(todayIdx, 4) : 0}
-            onCreate={(day, s, e) => setDraft({ day, start_min: s, end_min: e })}
             onEdit={(b) => setDraft({ ...b })}
           />
 
           {allBlocks.length === 0 && (
-            <p className="mt-3 text-center text-sm text-board-cream/60">Toca un hueco del horario (o «Bloque») para añadir tu primera clase o turno.</p>
+            <p className="mt-3 text-center text-sm text-board-cream/60">Pulsa «Bloque» para añadir tu primera clase o turno.</p>
           )}
           {error && <p className="mt-2 text-sm text-board-danger">{error}</p>}
         </>
