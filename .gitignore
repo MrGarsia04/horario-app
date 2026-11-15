@@ -6,3 +6,4 @@ dist
 !.env.example
 .Rhistory
 *.code-workspace
+supabase/.temp

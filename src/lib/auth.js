@@ -6,6 +6,11 @@ import { supabase } from './supabaseClient'
 
 export const MIN_PASSWORD = 6
 
+function isEmailTakenError(error) {
+  const msg = (error?.message ?? '').toLowerCase()
+  return msg.includes('already registered') || msg.includes('already been registered') || error?.code === 'user_already_exists'
+}
+
 function translateAuthError(error) {
   const msg = (error?.message ?? '').toLowerCase()
   if (msg.includes('username_taken')) return 'Ese nombre de usuario ya está en uso, prueba con otro.'
@@ -60,13 +65,35 @@ export async function claimLegacyAccount(username, oldPassword, email, newPasswo
   if (checkErr) return { error: translateAuthError(checkErr) }
   if (!valid) return { error: 'Usuario o contraseña antigua incorrectos (o esa cuenta ya fue migrada: entra con tu email).' }
 
+  // La reclamación ocurre dentro del trigger de signUp (atómica): si falla, no se crea la cuenta.
   const { data, error } = await supabase.auth.signUp({
     email: mail,
     password: newPassword,
     options: { data: { legacy_username: name, legacy_hash: hash }, emailRedirectTo: window.location.origin },
   })
-  if (error) return { error: translateAuthError(error) }
-  return { data: { needsConfirmation: !data.session } }
+  if (!error) return { data: { needsConfirmation: !data.session } }
+
+  if (!isEmailTakenError(error)) return { error: translateAuthError(error) }
+
+  // El email ya tiene cuenta (p. ej. un intento anterior que sí llegó a crearla).
+  // Reintento idempotente: si la contraseña nueva abre esa cuenta y ya es la del perfil
+  // antiguo, no hay nada más que hacer.
+  const { data: signed, error: signErr } = await supabase.auth.signInWithPassword({ email: mail, password: newPassword })
+  if (signErr || !signed?.user) {
+    return {
+      error:
+        'Ese email ya tiene una cuenta con otra contraseña. Inicia sesión con ella, o usa «He olvidado mi contraseña».',
+    }
+  }
+  const { data: profile } = await supabase.from('profiles').select('username').eq('auth_id', signed.user.id).maybeSingle()
+  if (profile && profile.username.toLowerCase() === name.toLowerCase()) {
+    return { data: { needsConfirmation: false } }
+  }
+  await supabase.auth.signOut()
+  return {
+    error:
+      'Ese email ya tiene una cuenta que no es la de este usuario antiguo. Usa otro email, o pide que se elimine esa cuenta vacía.',
+  }
 }
 
 export async function signIn(email, password) {
