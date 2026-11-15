@@ -180,3 +180,109 @@ describe('bestSlots: no propone el pasado', () => {
     expect(r.some((c) => c.date === '2026-11-09')).toBe(false)
   })
 })
+
+// ---------- Capas: frecuencia, ancla, interruptor, fechas, excepciones por capa ----------
+import { layerAppliesOnWeek, nextOccurrences, weeksBetween, activeTemplates } from './availability'
+
+const layer = (over: Partial<Template> = {}): Template => tpl({ every_n_weeks: 1, anchor_week: null, ...over })
+
+describe('capas: frecuencia', () => {
+  it('weeksBetween cuenta semanas, también hacia atrás', () => {
+    expect(weeksBetween('2026-11-09', '2026-11-30')).toBe(3)
+    expect(weeksBetween('2026-11-30', '2026-11-09')).toBe(-3)
+  })
+  it('todas las semanas (1) o sin ancla: siempre toca', () => {
+    expect(layerAppliesOnWeek(layer({ every_n_weeks: 1 }), W1)).toBe(true)
+    expect(layerAppliesOnWeek(layer({ every_n_weeks: 3, anchor_week: null }), W1)).toBe(true)
+  })
+  it('cada 2 semanas desde el ancla: toca ancla, ancla+2, ancla+4…', () => {
+    const l = layer({ every_n_weeks: 2, anchor_week: '2026-11-09' })
+    expect([0, 1, 2, 3, 4].map((i) => layerAppliesOnWeek(l, addW(W1, i)))).toEqual([true, false, true, false, true])
+  })
+  it('cada 3 y cada 4 semanas', () => {
+    const l3 = layer({ every_n_weeks: 3, anchor_week: '2026-11-09' })
+    expect([0, 1, 2, 3, 4, 5, 6].map((i) => layerAppliesOnWeek(l3, addW(W1, i)))).toEqual([true, false, false, true, false, false, true])
+    const l4 = layer({ every_n_weeks: 4, anchor_week: '2026-11-23' })
+    expect(layerAppliesOnWeek(l4, '2026-11-23')).toBe(true)
+    expect(layerAppliesOnWeek(l4, '2026-12-21')).toBe(true)
+    expect(layerAppliesOnWeek(l4, '2026-12-14')).toBe(false)
+  })
+  it('también cuenta hacia atrás desde el ancla (semanas anteriores)', () => {
+    const l = layer({ every_n_weeks: 2, anchor_week: '2026-11-23' })
+    expect(layerAppliesOnWeek(l, '2026-11-09')).toBe(true)
+    expect(layerAppliesOnWeek(l, '2026-11-02')).toBe(false)
+  })
+  it('el ancla puede ser cualquier día de la semana (se normaliza al lunes)', () => {
+    const l = layer({ every_n_weeks: 2, anchor_week: '2026-11-11' }) // miércoles
+    expect(layerAppliesOnWeek(l, '2026-11-09')).toBe(true)
+  })
+  it('nextOccurrences lista las próximas semanas en que toca', () => {
+    const l = layer({ every_n_weeks: 3, anchor_week: '2026-11-09' })
+    expect(nextOccurrences(l, '2026-11-16', 3)).toEqual(['2026-11-30', '2026-12-21', '2027-01-11'])
+    expect(nextOccurrences(l, '2026-11-12', 1)).toEqual(['2026-11-09']) // normaliza al lunes de esa semana
+  })
+})
+
+function addW(w: string, n: number) {
+  const d = new Date(w + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + 7 * n)
+  return d.toISOString().slice(0, 10)
+}
+
+describe('capas: disponibilidad', () => {
+  const mondayBlock = (templateId: string, s = 540, e = 600) => block({ template_id: templateId, day: 'mon', start_min: s, end_min: e })
+
+  it('una capa quincenal solo ocupa en sus semanas', () => {
+    const m = member('u', {
+      templates: [layer({ id: 'base' }), layer({ id: 'q', every_n_weeks: 2, anchor_week: W1 })],
+      blocks: [mondayBlock('base', 540, 600), mondayBlock('q', 700, 760)],
+    })
+    expect(busyIntervalsForDate(m, '2026-11-09', null)).toEqual([{ start: 540, end: 600 }, { start: 700, end: 760 }])
+    expect(busyIntervalsForDate(m, '2026-11-16', null)).toEqual([{ start: 540, end: 600 }])
+    expect(busyIntervalsForDate(m, '2026-11-23', null)).toHaveLength(2)
+  })
+  it('capa desactivada: no cuenta, aunque toque esa semana', () => {
+    const m = member('u', { templates: [layer({ id: 'q', every_n_weeks: 2, anchor_week: W1, is_active: false })], blocks: [mondayBlock('q')] })
+    expect(busyIntervalsForDate(m, '2026-11-09', null)).toEqual([])
+    expect(activeTemplates(m.templates, '2026-11-09')).toEqual([])
+  })
+  it('frecuencia + fechas de la capa: ambas condiciones', () => {
+    const m = member('u', { templates: [layer({ id: 'q', every_n_weeks: 2, anchor_week: W1, active_from: '2026-11-20' })], blocks: [mondayBlock('q')] })
+    expect(busyIntervalsForDate(m, '2026-11-09', null)).toEqual([]) // toca pero aún no ha empezado
+    expect(busyIntervalsForDate(m, '2026-11-16', null)).toEqual([]) // no toca
+    expect(busyIntervalsForDate(m, '2026-11-23', null)).toHaveLength(1)
+  })
+  it('excepción dirigida a una capa: libera solo esa capa', () => {
+    const m = member('u', {
+      templates: [layer({ id: 'a' }), layer({ id: 'b' })],
+      blocks: [mondayBlock('a', 540, 600), mondayBlock('b', 700, 760)],
+      exceptions: [exc({ kind: 'free', template_id: 'a' })],
+    })
+    expect(busyIntervalsForDate(m, '2026-11-09', null)).toEqual([{ start: 700, end: 760 }])
+  })
+  it('excepción sin capa: afecta a todo', () => {
+    const m = member('u', {
+      templates: [layer({ id: 'a' }), layer({ id: 'b' })],
+      blocks: [mondayBlock('a', 540, 600), mondayBlock('b', 700, 760)],
+      exceptions: [exc({ kind: 'free' })],
+    })
+    expect(busyIntervalsForDate(m, '2026-11-09', null)).toEqual([])
+  })
+  it('mapa del grupo y mejores franjas con capas distintas por persona', () => {
+    const A = member('A', { templates: [layer({ id: 'qa', user_id: 'A', every_n_weeks: 2, anchor_week: W1 })], blocks: [block({ template_id: 'qa', user_id: 'A', day: 'mon', start_min: 600, end_min: 720 })] })
+    const B = member('B', { templates: [layer({ id: 'wb', user_id: 'B' })], blocks: [block({ template_id: 'wb', user_id: 'B', day: 'mon', start_min: 540, end_min: 660 })] })
+    const win = { days: ['mon' as const], startMin: 540, endMin: 780 }
+    // Semana W1: A ocupado 10-12, B 9-11 → libres juntos desde 12:00
+    expect(bestSlots([A, B], W1, null, win, 60, 1)[0]).toMatchObject({ startMin: 720, endMin: 780, freeUserIds: ['A', 'B'] })
+    // Semana W2: a A no le toca → solo B ocupado hasta 11:00; los dos libres desde 11:00
+    expect(bestSlots([A, B], W2, null, win, 60, 1)[0]).toMatchObject({ startMin: 660, endMin: 720 })
+    const [mon] = groupAvailability([A, B], W2, null, win)
+    expect(mon.slots.find((s) => s.startMin === 600)!.freeUserIds).toEqual(['A'])
+  })
+  it('compatibilidad: bloques con repetición A/B de antes siguen funcionando', () => {
+    const p = weekParity(W1)
+    const m = member('u', { templates: [layer({ id: 'x' })], blocks: [block({ template_id: 'x', repeat: p === 'a' ? 'biweekly_a' : 'biweekly_b' })] })
+    expect(busyIntervalsForDate(m, W1, null)).toHaveLength(1)
+    expect(busyIntervalsForDate(m, W2, null)).toHaveLength(0)
+  })
+})

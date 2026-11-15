@@ -1,4 +1,4 @@
-import { getWeekStart, getDateForDay, resolveScheduleForWeek } from '../weeks'
+import { getWeekStart, getDateForDay, resolveScheduleForWeek, addWeeks } from '../weeks'
 import type {
   Block, Candidate, DayKey, Exception, Interval, MemberSchedule, Template, ViewWindow,
 } from './types'
@@ -74,28 +74,54 @@ export function overlaps(list: Interval[], start: number, end: number): boolean 
   return list.some((iv) => iv.start < end && start < iv.end)
 }
 
-// ---------- horario de una persona en una fecha ----------
-export function activeTemplates(templates: Template[], date: string): Template[] {
-  return templates.filter((t) => t.is_active && inRange(date, t.active_from, t.active_to))
+// ---------- capas ----------
+export function weeksBetween(fromWeekStart: string, toWeekStart: string): number {
+  return Math.round((parseDate(toWeekStart).getTime() - parseDate(fromWeekStart).getTime()) / (7 * 86_400_000))
 }
 
+/** ¿Le «toca» a la capa en esa semana? (cada N semanas contadas desde su semana ancla, hacia delante y hacia atrás) */
+export function layerAppliesOnWeek(t: Template, weekStart: string): boolean {
+  const n = t.every_n_weeks ?? 1
+  if (n <= 1 || !t.anchor_week) return true
+  const diff = weeksBetween(getWeekStart(t.anchor_week), weekStart)
+  return (((diff % n) + n) % n) === 0
+}
+
+/** Las próximas `count` semanas (lunes) en las que toca la capa, desde `fromWeek` incluida. */
+export function nextOccurrences(t: Template, fromWeek: string, count = 3): string[] {
+  const out: string[] = []
+  let w = getWeekStart(fromWeek)
+  for (let i = 0; i < 80 && out.length < count; i++) {
+    if (layerAppliesOnWeek(t, w)) out.push(w)
+    w = addWeeks(w, 1)
+  }
+  return out
+}
+
+/** Capas que cuentan en una fecha: activadas, dentro de sus fechas y con frecuencia que toque esa semana. */
+export function activeTemplates(templates: Template[], date: string): Template[] {
+  const week = getWeekStart(date)
+  return templates.filter((t) => t.is_active && inRange(date, t.active_from, t.active_to) && layerAppliesOnWeek(t, week))
+}
+
+// ---------- horario de una persona en una fecha ----------
 export function blockApplies(b: Block, date: string, groupCode: string | null, parity: 'a' | 'b'): boolean {
   if (b.group_code && b.group_code !== groupCode) return false
   if (b.day !== dayKeyOf(date)) return false
   if (!inRange(date, b.valid_from, b.valid_to)) return false
+  // Repetición por bloque: solo para datos anteriores a las capas (0006 los convierte en capas)
   if (b.repeat === 'biweekly_a' && parity !== 'a') return false
   if (b.repeat === 'biweekly_b' && parity !== 'b') return false
   return true
 }
 
-function applyExceptions(base: Interval[], exceptions: Exception[], date: string, groupCode: string | null): Interval[] {
+function applyExceptions(base: Interval[], exceptions: Exception[]): Interval[] {
   let busy = base
-  const todays = exceptions.filter((e) => e.date === date && (!e.group_code || e.group_code === groupCode))
   // Primero las que liberan, luego las que ocupan: una ocupación puntual gana a una liberación.
-  for (const e of todays.filter((x) => x.kind === 'free')) {
+  for (const e of exceptions.filter((x) => x.kind === 'free')) {
     busy = e.start_min == null || e.end_min == null ? [] : subtractInterval(busy, { start: e.start_min, end: e.end_min })
   }
-  for (const e of todays.filter((x) => x.kind === 'busy')) {
+  for (const e of exceptions.filter((x) => x.kind === 'busy')) {
     busy = busy.concat({ start: e.start_min ?? 0, end: e.end_min ?? 24 * 60 })
   }
   return busy
@@ -104,6 +130,7 @@ function applyExceptions(base: Interval[], exceptions: Exception[], date: string
 /** Intervalos ocupados (en minutos, ya fusionados) de un miembro en una fecha concreta. */
 export function busyIntervalsForDate(member: MemberSchedule, date: string, groupCode: string | null): Interval[] {
   const weekStart = getWeekStart(date)
+  const todays = member.exceptions.filter((e) => e.date === date && (!e.group_code || e.group_code === groupCode))
   let busy: Interval[]
 
   if (member.mode === 'legacy') {
@@ -112,14 +139,20 @@ export function busyIntervalsForDate(member: MemberSchedule, date: string, group
     busy = (schedule as { day: DayKey; start: string; end: string }[])
       .filter((iv) => iv.day === day)
       .map((iv) => ({ start: toMinutes(iv.start), end: toMinutes(iv.end) }))
-  } else {
-    const ids = new Set(activeTemplates(member.templates, date).map((t) => t.id))
-    const parity = weekParity(weekStart)
-    busy = member.blocks
-      .filter((b) => ids.has(b.template_id) && blockApplies(b, date, groupCode, parity))
-      .map((b) => ({ start: b.start_min, end: b.end_min }))
+    return mergeIntervals(applyExceptions(busy, todays))
   }
-  return mergeIntervals(applyExceptions(busy, member.exceptions, date, groupCode))
+
+  const parity = weekParity(weekStart)
+  const perLayer: Interval[] = []
+  for (const layer of activeTemplates(member.templates, date)) {
+    const own = member.blocks
+      .filter((b) => b.template_id === layer.id && blockApplies(b, date, groupCode, parity))
+      .map((b) => ({ start: b.start_min, end: b.end_min }))
+    // Las excepciones dirigidas a una capa solo tocan sus bloques
+    perLayer.push(...applyExceptions(own, todays.filter((e) => e.template_id === layer.id)))
+  }
+  busy = mergeIntervals(perLayer)
+  return mergeIntervals(applyExceptions(busy, todays.filter((e) => !e.template_id)))
 }
 
 // ---------- mapa de calor ----------

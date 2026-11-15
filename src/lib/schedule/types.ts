@@ -27,19 +27,31 @@ export interface Block {
   valid_to: string | null
 }
 
+/** Una CAPA del horario (en la base: schedule_templates). */
 export interface Template {
   id: string
   user_id: string
   name: string
+  /** interruptor: una capa desactivada no cuenta para nada */
   is_active: boolean
+  /** fechas opcionales entre las que cuenta la capa */
   active_from: string | null
   active_to: string | null
+  /** color base: los bloques lo heredan salvo que tengan el suyo */
+  color?: string | null
+  /** 1 = todas las semanas, 2 = una sí y otra no, 3, 4… */
+  every_n_weeks?: number
+  /** lunes de una semana en la que la capa «toca»; con every_n_weeks > 1 las demás se cuentan desde ahí */
+  anchor_week?: string | null
+  sort_order?: number
 }
 
 /** Excepción puntual: 'free' libera el rango (o el día entero si no hay rango); 'busy' lo ocupa. */
 export interface Exception {
   id: string
   user_id: string
+  /** null = afecta a todo; con valor, solo a los bloques de esa capa */
+  template_id?: string | null
   group_code: string | null
   date: string
   kind: 'free' | 'busy'
