@@ -417,3 +417,6 @@ revoke all on public.group_invites from authenticated;  -- solo vía RPC get_inv
 revoke insert, delete on public.groups, public.group_memberships from authenticated;
 revoke insert, delete, update on public.profiles from authenticated;
 grant update (username, birthday, bio) on public.profiles to authenticated;
+
+-- Que la API de Supabase (PostgREST) vea ya las funciones nuevas.
+notify pgrst, 'reload schema';
