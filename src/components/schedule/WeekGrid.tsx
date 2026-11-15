@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { toLabel } from '../../lib/schedule/availability'
+import { canScroll, columnWidth, firstVisibleDay, scrollLeftForDay } from '../../lib/schedule/dayPager'
 import type { Block, DayKey } from '../../lib/schedule/types'
 import { IconLeft, IconRight, IconRepeat } from '../../ui/icons'
 import { DAYS, SNAP, snap } from './constants'
@@ -35,50 +36,89 @@ interface Props {
 
 export default function WeekGrid({ blocksByDay, layerColor, dates = null, today, freeDays, initialDay = 0, onCreate, onEdit }: Props) {
   const dayCount = useDayCount()
-  const [startIdx, setStartIdx] = useState(initialDay)
-  const maxStart = 7 - dayCount
-  const first = Math.min(startIdx, maxStart)
-  useEffect(() => setStartIdx(initialDay), [initialDay])
-  const visible = DAYS.slice(first, first + dayCount)
+  const scroller = useRef<HTMLDivElement>(null)
+  const [first, setFirst] = useState(Math.min(initialDay, 7 - dayCount))
 
-  const shown = visible.flatMap((d) => blocksByDay[d.key] ?? [])
+  // Todas las columnas existen siempre; en móvil se ven 3 y el resto se alcanza DESLIZANDO el dedo (scroll horizontal con «snap»)
+  const shown = DAYS.flatMap((d) => blocksByDay[d.key] ?? [])
   const { from, to } = useMemo(() => ({
     from: Math.min(DEFAULT_FROM, Math.floor(Math.min(...shown.map((b) => b.start_min), DEFAULT_FROM) / 60) * 60),
     to: Math.max(DEFAULT_TO, Math.ceil(Math.max(...shown.map((b) => b.end_min), DEFAULT_TO) / 60) * 60),
   }), [shown])
   const height = (to - from) * PX_PER_MIN
+  const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+  const colW = () => columnWidth(scroller.current?.clientWidth ?? 0, dayCount)
+  const syncFirst = useCallback(() => {
+    const el = scroller.current
+    if (el) setFirst(firstVisibleDay(el.scrollLeft, columnWidth(el.clientWidth, dayCount), dayCount))
+  }, [dayCount])
+
+  // Abrir en el día pedido (hoy, o el lunes) y recolocar si cambia el número de días visibles (girar el móvil, redimensionar)
+  useLayoutEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    el.scrollLeft = scrollLeftForDay(initialDay, columnWidth(el.clientWidth, dayCount), dayCount)
+    syncFirst()
+  }, [initialDay, dayCount, syncFirst])
+
+  const move = (delta: number) => {
+    const el = scroller.current
+    if (el) el.scrollTo({ left: scrollLeftForDay(first + delta, colW(), dayCount), behavior: reduced ? 'auto' : 'smooth' })
+  }
+  const can = canScroll(first, dayCount)
+  const last = Math.min(6, first + dayCount - 1)
 
   return (
-    <div className="card !p-0 overflow-hidden">
-      <div className="flex select-none">
-        <div className="w-11 shrink-0 border-r border-board-line">
-          <div className="h-11 border-b border-board-line" />
-          <div className="relative" style={{ height }} aria-hidden="true">
-            {Array.from({ length: Math.floor((to - from) / 60) }, (_, i) => (
-              <span key={i} className="absolute right-1.5 font-mono text-[10px] text-board-cream/50" style={{ top: i * 60 * PX_PER_MIN + 2 }}>{toLabel(from + i * 60)}</span>
-            ))}
+    <div>
+      <div className="card relative !p-0 overflow-hidden" data-tour="week-grid">
+        <div className="flex select-none">
+          <div className="w-11 shrink-0 border-r border-board-line">
+            <div className="h-11 border-b border-board-line" />
+            <div className="relative" style={{ height }} aria-hidden="true">
+              {Array.from({ length: Math.floor((to - from) / 60) }, (_, i) => (
+                <span key={i} className="absolute right-1.5 font-mono text-[10px] text-board-cream/50" style={{ top: i * 60 * PX_PER_MIN + 2 }}>{toLabel(from + i * 60)}</span>
+              ))}
+            </div>
+          </div>
+          <div
+            ref={scroller}
+            onScroll={syncFirst}
+            className="min-w-0 flex-1 snap-x snap-mandatory overflow-x-auto overscroll-x-contain"
+            style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+            aria-label="Días de la semana: desliza para ver más"
+          >
+            <div className="flex" style={{ width: `${(7 / dayCount) * 100}%` }}>
+              {DAYS.map((d) => (
+                <DayColumn
+                  key={d.key}
+                  dayKey={d.key}
+                  label={d.short}
+                  date={dates?.[d.key] ?? null}
+                  isToday={Boolean(today) && dates?.[d.key] === today}
+                  blocks={blocksByDay[d.key] ?? []}
+                  layerColor={layerColor}
+                  from={from}
+                  to={to}
+                  height={height}
+                  hasFree={freeDays?.has(d.key) ?? false}
+                  onCreate={(s, e) => onCreate(d.key, s, e)}
+                  onEdit={onEdit}
+                />
+              ))}
+            </div>
           </div>
         </div>
-        {visible.map((d, idx) => (
-          <DayColumn
-            key={d.key}
-            dayKey={d.key}
-            label={d.short}
-            date={dates?.[d.key] ?? null}
-            isToday={Boolean(today) && dates?.[d.key] === today}
-            blocks={blocksByDay[d.key] ?? []}
-            layerColor={layerColor}
-            from={from}
-            to={to}
-            height={height}
-            hasFree={freeDays?.has(d.key) ?? false}
-            leftArrow={idx === 0 && first > 0 ? () => setStartIdx(first - 1) : undefined}
-            rightArrow={idx === visible.length - 1 && first < maxStart ? () => setStartIdx(first + 1) : undefined}
-            onCreate={(s, e) => onCreate(d.key, s, e)}
-            onEdit={onEdit}
-          />
-        ))}
+
+        {/* Flechas como alternativa (ratón, teclado y accesibilidad): siguen al scroll; en el móvil lo normal es deslizar con el dedo */}
+        {can.left && <button onClick={() => move(-1)} className="absolute left-12 top-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-board-bg/80 text-board-cream/70 hover:text-board-cream" aria-label="Días anteriores"><IconLeft className="h-4 w-4" /></button>}
+        {can.right && <button onClick={() => move(1)} className="absolute right-1 top-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-board-bg/80 text-board-cream/70 hover:text-board-cream" aria-label="Días siguientes"><IconRight className="h-4 w-4" /></button>}
       </div>
+      {dayCount < 7 && (
+        <p className="mt-2 text-center text-xs text-board-cream/50" role="status">
+          {DAYS[first].short}–{DAYS[last].short} · desliza hacia los lados para ver más días
+        </p>
+      )}
     </div>
   )
 }
@@ -94,13 +134,11 @@ interface ColProps {
   to: number
   height: number
   hasFree: boolean
-  leftArrow?: () => void
-  rightArrow?: () => void
   onCreate: (start: number, end: number) => void
   onEdit: (b: Block) => void
 }
 
-function DayColumn({ dayKey, label, date, isToday, blocks, layerColor, from, to, height, hasFree, leftArrow, rightArrow, onCreate, onEdit }: ColProps) {
+function DayColumn({ dayKey, label, date, isToday, blocks, layerColor, from, to, height, hasFree, onCreate, onEdit }: ColProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ a: number; b: number } | null>(null)
   const dragRef = useRef<{ a: number; b: number } | null>(null)
@@ -155,14 +193,12 @@ function DayColumn({ dayKey, label, date, isToday, blocks, layerColor, from, to,
   }
 
   return (
-    <div className="min-w-0 flex-1 border-l border-board-line first:border-l-0">
-      <div className={`flex h-11 items-center justify-between border-b border-board-line px-0.5 ${isToday ? 'bg-board-amber/15' : ''}`}>
-        <button onClick={leftArrow} disabled={!leftArrow} className="flex h-9 w-6 items-center justify-center text-board-cream/50 disabled:opacity-0" aria-label="Días anteriores"><IconLeft className="h-4 w-4" /></button>
+    <div className="min-w-0 flex-1 snap-start border-l border-board-line first:border-l-0">
+      <div className={`flex h-11 items-center justify-center border-b border-board-line px-0.5 ${isToday ? 'bg-board-amber/15' : ''}`}>
         <div className="text-center leading-tight">
           <div className={`text-xs font-semibold ${isToday ? 'text-board-amber' : ''}`}>{label}</div>
           <div className="font-mono text-[10px] text-board-cream/50">{date ? date.slice(8) : '\u00a0'}{hasFree ? ' · libre' : ''}</div>
         </div>
-        <button onClick={rightArrow} disabled={!rightArrow} className="flex h-9 w-6 items-center justify-center text-board-cream/50 disabled:opacity-0" aria-label="Días siguientes"><IconRight className="h-4 w-4" /></button>
       </div>
       <div
         ref={ref}
@@ -170,7 +206,7 @@ function DayColumn({ dayKey, label, date, isToday, blocks, layerColor, from, to,
         onPointerMove={move}
         onPointerUp={up}
         onPointerCancel={() => { setDragBoth(null); touchRef.current = null }}
-        style={{ height, touchAction: 'pan-y', backgroundImage: 'linear-gradient(rgb(var(--board-line) / 0.6) 1px, transparent 1px)', backgroundSize: `100% ${60 * PX_PER_MIN}px` }}
+        style={{ height, backgroundImage: 'linear-gradient(rgb(var(--board-line) / 0.6) 1px, transparent 1px)', backgroundSize: `100% ${60 * PX_PER_MIN}px` }}
         className="relative cursor-crosshair"
         data-testid={`col-${dayKey}`}
       >
