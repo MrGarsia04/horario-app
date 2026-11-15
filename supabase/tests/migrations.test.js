@@ -50,6 +50,9 @@ beforeAll(async () => {
     grant usage on schema auth, public to anon, authenticated;
   `)
   await db.exec(sql('0001_base.sql'))
+  // Políticas abiertas como las de la versión antigua: 0002 debe eliminarlas
+  await db.exec(`alter table schedules enable row level security;
+    create policy "Cualquiera puede leer" on schedules for select using (true);`)
   // Datos heredados: un usuario antiguo con horario y grupo
   await q(`insert into profiles (id, username, password_hash) values ($1, 'viejo', '${HASH}')`, [LEGACY])
   await q(`insert into group_memberships (user_id, group_code) values ($1, 'old')`, [LEGACY])
@@ -64,6 +67,9 @@ beforeAll(async () => {
 })
 
 describe('0002: conserva los datos heredados', () => {
+  it('elimina las políticas abiertas antiguas', async () => {
+    expect((await q(`select count(*)::int n from pg_policies where policyname = 'Cualquiera puede leer'`)).rows[0].n).toBe(0)
+  })
   it('no borra nada de public', async () => {
     expect((await q(`select count(*)::int n from public.profiles`)).rows[0].n).toBe(1)
     expect((await q(`select count(*)::int n from public.group_memberships`)).rows[0].n).toBe(1)

@@ -177,12 +177,12 @@ returns boolean language sql stable security definer set search_path = public as
                   where user_a = least(p_a, p_b) and user_b = greatest(p_a, p_b) and status = 'accepted');
 $$;
 
-create or replace function public.is_event_creator(p_event uuid)
+create or replace function public.is_event_creator(p_event bigint)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.events where id = p_event and creator_id = public.me());
 $$;
 
-create or replace function public.is_event_participant(p_event uuid)
+create or replace function public.is_event_participant(p_event bigint)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.events where id = p_event and creator_id = public.me())
       or exists (select 1 from public.event_invitations where event_id = p_event and invitee_id = public.me());
@@ -320,6 +320,16 @@ create trigger invitations_freeze before update on public.event_invitations
 -- ---------------------------------------------------------------------------
 -- 7. RLS
 -- ---------------------------------------------------------------------------
+-- Borra las políticas que ya hubiera (p.ej. las "cualquiera puede..." de la versión
+-- antigua): las políticas permisivas se SUMAN y anularían las nuevas.
+do $$
+declare r record;
+begin
+  for r in select schemaname, tablename, policyname from pg_policies where schemaname = 'public' loop
+    execute format('drop policy %I on %I.%I', r.policyname, r.schemaname, r.tablename);
+  end loop;
+end $$;
+
 alter table public.profiles          enable row level security;
 alter table public.groups            enable row level security;
 alter table public.group_invites     enable row level security;
@@ -408,8 +418,8 @@ grant execute on function
   public.create_group(text), public.join_group(text), public.get_invite_code(text),
   public.rotate_invite_code(text), public.leave_group(text), public.set_member_role(text, uuid, text),
   public.find_user_by_username(text), public.is_group_member(text), public.is_group_admin(text),
-  public.shares_group_with(uuid), public.are_friends(uuid, uuid), public.is_event_creator(uuid),
-  public.is_event_participant(uuid), public.shares_event_with(uuid), public.me()
+  public.shares_group_with(uuid), public.are_friends(uuid, uuid), public.is_event_creator(bigint),
+  public.is_event_participant(bigint), public.shares_event_with(uuid), public.me()
   to authenticated;
 -- Los clientes no insertan/borran en estas tablas directamente:
 revoke all on public.legacy_credentials from authenticated;
