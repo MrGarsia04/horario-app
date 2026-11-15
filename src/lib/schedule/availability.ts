@@ -171,7 +171,8 @@ export function bestSlots(
   durationMin: number,
   limit = 3,
   resolution = RESOLUTION,
-  minFree = 2
+  minFree = 2,
+  after?: { date: string; min: number } // no proponer nada anterior a este instante
 ): Candidate[] {
   const total = members.length
   const all: Candidate[] = []
@@ -182,6 +183,7 @@ export function bestSlots(
     for (let s = win.startMin; s + durationMin <= win.endMin; s += resolution) {
       const e = s + durationMin
       const free = busyByUser.filter((u) => !overlaps(u.busy, s, e)).map((u) => u.id)
+      if (after && (date < after.date || (date === after.date && s < after.min))) continue
       if (free.length >= Math.min(minFree, total)) {
         all.push({ date, day, startMin: s, endMin: e, freeUserIds: free, total })
       }

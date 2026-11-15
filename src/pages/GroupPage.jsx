@@ -13,6 +13,10 @@ import GroupSettings from '../components/GroupSettings'
 import WeekNavigator from '../components/WeekNavigator'
 import GroupMembersList from '../components/GroupMembersList'
 import InviteBox from '../components/InviteBox'
+import ScheduleEditor from '../components/schedule/ScheduleEditor'
+import GroupHeatmap15 from '../components/schedule/GroupHeatmap15'
+import BestTimes from '../components/schedule/BestTimes'
+import { useBlockModelAvailable, useGroupSchedules } from '../hooks/useSchedules'
 
 function birthdayDayKeyForWeek(weekStart, birthday) {
   if (!birthday) return null
@@ -32,6 +36,9 @@ export default function GroupPage({ settings = false }) {
   const birthdayQuery = useMyBirthday(user.id)
   const saveConfig = useSaveGroupConfig(codigo)
   const saveOverride = useSaveOverride(codigo, user.id)
+  // Modelo de bloques disponible (migración 0005 aplicada); si no, se usa el modelo antiguo.
+  const modelQuery = useBlockModelAvailable()
+  const blockModel = modelQuery.data === true
 
   const [selectedWeek, setSelectedWeek] = useState(getWeekStart(new Date()))
   const [view, setView] = useState('mine')
@@ -40,6 +47,8 @@ export default function GroupPage({ settings = false }) {
   const groupConfig = configQuery.data ?? DEFAULT_CONFIG
   const members = membersQuery.data?.members ?? []
   const overridesByUser = membersQuery.data?.overridesByUser ?? {}
+  const scheduleQuery = useGroupSchedules(codigo, members, overridesByUser, blockModel)
+  const scheduleMembers = scheduleQuery.data ?? []
   const me = members.find((m) => m.userId === user.id)
   const isAdmin = me?.role === 'owner' || me?.role === 'admin'
 
@@ -78,6 +87,15 @@ export default function GroupPage({ settings = false }) {
     navigate('/grupos')
   }
 
+  const myVisibility = scheduleMembers.find((m) => m.userId === user.id)?.visibility ?? 'busy'
+  const selectedSchedule = scheduleMembers.filter((m) => m.name === selectedMember)
+
+  function handleCreatePlan(plan) {
+    navigate('/planes', {
+      state: { newPlan: { title: '', date: plan.date, startTime: plan.startTime, endTime: plan.endTime, inviteeIds: plan.inviteeIds.filter((id) => id !== user.id) } },
+    })
+  }
+
   function handleSaveConfig(newConfig) {
     saveConfig.mutate(newConfig)
     navigate(`/g/${codigo}`)
@@ -107,6 +125,7 @@ export default function GroupPage({ settings = false }) {
       {settings ? (
         <GroupSettings
           config={groupConfig}
+          blockModel={blockModel}
           onSave={handleSaveConfig}
           onCancel={() => navigate(`/g/${codigo}`)}
         />
@@ -124,7 +143,7 @@ export default function GroupPage({ settings = false }) {
             </TabButton>
           </div>
 
-          {view !== 'members' && (
+          {view !== 'members' && (view !== 'mine' || !blockModel) && (
             <WeekNavigator
               weekStart={selectedWeek}
               onChange={setSelectedWeek}
@@ -132,7 +151,9 @@ export default function GroupPage({ settings = false }) {
             />
           )}
 
-          {view === 'mine' ? (
+          {view === 'mine' && blockModel ? (
+            <ScheduleEditor userId={user.id} groupCode={codigo} weekStart={selectedWeek} visibility={myVisibility} />
+          ) : view === 'mine' ? (
             <>
               <ScheduleGrid
                 config={groupConfig}
@@ -144,6 +165,20 @@ export default function GroupPage({ settings = false }) {
               <p className="text-xs text-board-cream/40 mt-2 h-4">
                 {saveOverride.isPending ? 'Guardando…' : ''}
               </p>
+            </>
+          ) : view === 'group' && blockModel ? (
+            <>
+              <MemberList members={resolvedMembers} selected={selectedMember} onSelect={setSelectedMember} />
+              {scheduleQuery.isLoading ? (
+                <p className="text-sm text-board-cream/50">Cargando horarios…</p>
+              ) : selectedMember ? (
+                <GroupHeatmap15 single config={groupConfig} members={selectedSchedule} weekStart={selectedWeek} groupCode={codigo} myUserId={user.id} highlightDayKey={myBirthdayDayKey} />
+              ) : (
+                <>
+                  <GroupHeatmap15 config={groupConfig} members={scheduleMembers} weekStart={selectedWeek} groupCode={codigo} myUserId={user.id} highlightDayKey={myBirthdayDayKey} />
+                  <BestTimes members={scheduleMembers} weekStart={selectedWeek} groupCode={codigo} config={groupConfig} onCreatePlan={handleCreatePlan} />
+                </>
+              )}
             </>
           ) : view === 'group' ? (
             <>

@@ -8,12 +8,12 @@ function formatEventDate(dateStr) {
   return d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
 }
 
-export default function EventsScreen({ userId, onBack }) {
+export default function EventsScreen({ userId, onBack, initialPlan }) {
   const eventsQuery = useMyEvents(userId)
   const load = useRefreshSocial(userId)
   const events = eventsQuery.data ?? []
   const loading = eventsQuery.isLoading
-  const [showForm, setShowForm] = useState(false)
+  const [showForm, setShowForm] = useState(Boolean(initialPlan))
   const [editingEvent, setEditingEvent] = useState(null)
 
   async function handleRespond(eventId, status) {
@@ -48,6 +48,7 @@ export default function EventsScreen({ userId, onBack }) {
         <CreateEventForm
           userId={userId}
           event={editingEvent}
+          initial={editingEvent ? undefined : initialPlan}
           existingInviteeIds={editingEvent ? editingEvent.invitees.map((i) => i.userId) : []}
           onCreated={() => {
             closeForm()

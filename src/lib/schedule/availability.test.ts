@@ -169,3 +169,14 @@ describe('groupAvailability y bestSlots con horarios distintos', () => {
     expect(mon.slots.find((s) => s.startMin === 660)!.freeUserIds).toEqual(['A'])
   })
 })
+
+describe('bestSlots: no propone el pasado', () => {
+  const A = member('A')
+  const B = member('B')
+  const win = { days: ['mon' as const, 'tue' as const], startMin: 540, endMin: 720 }
+  it('descarta franjas anteriores al instante dado', () => {
+    const r = bestSlots([A, B], W1, null, win, 60, 10, 15, 2, { date: '2026-11-10', min: 600 })
+    expect(r.every((c) => c.date > '2026-11-10' || (c.date === '2026-11-10' && c.startMin >= 600))).toBe(true)
+    expect(r.some((c) => c.date === '2026-11-09')).toBe(false)
+  })
+})

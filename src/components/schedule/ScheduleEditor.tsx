@@ -234,25 +234,34 @@ function DayColumn({ dayKey, label, blocks, from, to, height, showParity, onCrea
     return Math.max(from, Math.min(to, snap(m)))
   }
 
+  // El arrastre vive en una ref (los eventos llegan más rápido que los renders) y se copia al estado para pintarlo.
+  const dragRef = useRef<{ a: number; b: number } | null>(null)
+  const setDragBoth = (d: { a: number; b: number } | null) => {
+    dragRef.current = d
+    setDrag(d)
+  }
+
   function down(e: React.PointerEvent) {
     if (e.button !== 0 && e.pointerType === 'mouse') return
-    e.currentTarget.setPointerCapture(e.pointerId)
+    e.currentTarget.setPointerCapture?.(e.pointerId)
     const m = minuteAt(e.clientY)
-    setDrag({ a: m, b: m })
+    setDragBoth({ a: m, b: m })
   }
   function move(e: React.PointerEvent) {
-    if (drag) setDrag({ a: drag.a, b: minuteAt(e.clientY) })
+    const d = dragRef.current
+    if (d) setDragBoth({ a: d.a, b: minuteAt(e.clientY) })
   }
   function up() {
-    if (!drag) return
-    let s = Math.min(drag.a, drag.b)
-    let e = Math.max(drag.a, drag.b)
+    const d = dragRef.current
+    if (!d) return
+    let s = Math.min(d.a, d.b)
+    let e = Math.max(d.a, d.b)
     if (e - s < SNAP) e = s + 60 // un simple toque = bloque de 1 h
     if (e > to) {
       e = to
       s = Math.min(s, e - SNAP)
     }
-    setDrag(null)
+    setDragBoth(null)
     onCreate(s, e)
   }
 
@@ -275,7 +284,7 @@ function DayColumn({ dayKey, label, blocks, from, to, height, showParity, onCrea
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}
-        onPointerCancel={() => setDrag(null)}
+        onPointerCancel={() => setDragBoth(null)}
         style={{ height, touchAction: 'none', backgroundImage: 'linear-gradient(rgb(var(--board-line)) 1px, transparent 1px)', backgroundSize: `100% ${60 * PX_PER_MIN}px` }}
         className="relative border-l border-board-line bg-board-panel cursor-crosshair"
         data-testid={`col-${dayKey}`}

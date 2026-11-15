@@ -79,7 +79,7 @@ beforeAll(async () => {
     await db.exec(sql(f))
   }
   // 0002 enlaza perfiles con auth: simulamos que ya se han migrado a Auth
-  for (const [i, u] of [U1, U2, U3].entries()) {
+  for (const i of [0, 1, 2]) {
     await q(`insert into auth.users (id,email,raw_user_meta_data) values ($1,$2,$3)`, [`00000000-0000-0000-0000-0000000000a${i}`, `u${i}@usuarios.horario-app.com`, JSON.stringify({ legacy_username: ['ana', 'beto', 'carla'][i], legacy_hash: ['h1', 'h2', 'h3'][i] })])
   }
   await db.exec(sql('0005_horarios_bloques.sql'))
