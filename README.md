@@ -149,3 +149,26 @@ Supabase. El correo real es opcional: se ofrece tras iniciar sesión y se guarda
 `profile_private` (solo lo ve su dueño). Sin SMTP no hay recuperación por email: un administrador
 restablece la contraseña por SQL, tras comprobar que su correo guardado coincide: ver
 `supabase/admin/restablecer_contrasena.sql` (se pega en el SQL Editor de Supabase).
+
+### Recuperación de contraseña por correo
+
+Quien tiene un correo de contacto guardado puede pedir un código de 6 dígitos desde «He olvidado mi
+contraseña». Funciona con dos funciones de Vercel (`api/recuperar/solicitar.js` y `confirmar.js`) que
+usan la **service role key** de Supabase (solo en el servidor) y envían el correo con una cuenta de Gmail.
+
+- El código caduca a los 15 minutos, tiene 5 intentos y es de un solo uso; solo se guarda su HMAC.
+- Máximo 3 solicitudes por hora y usuario, y 10 por IP. La respuesta es idéntica exista o no la cuenta.
+- Al cambiar la contraseña se cierran las sesiones abiertas de esa cuenta.
+
+**Puesta en marcha**
+1. Aplica la migración: `npx supabase db push --remote` (incluye `0004_recuperacion.sql`).
+2. Gmail: activa la verificación en dos pasos y crea una *contraseña de aplicación*
+   (https://myaccount.google.com/apppasswords). Gmail permite ~500 correos/día, de sobra.
+3. Vercel → tu proyecto → Settings → Environment Variables (marca **Production** y **Preview**):
+   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (Project Settings → API → *service_role*, secreta),
+   `GMAIL_USER`, `GMAIL_APP_PASSWORD` y, opcional, `RECOVERY_SECRET`. Vuelve a desplegar.
+4. El remitente será tu propia cuenta de Gmail; los primeros correos pueden caer en spam.
+
+**Probar en local**: pon esas variables en un `.env` local (ya está ignorado por git) y ejecuta
+`npx vercel dev` (en lugar de `npm run dev`; la primera vez pide `vercel login` y enlazar el proyecto).
+Si falta `GMAIL_USER`, el correo **se escribe en la consola** en lugar de enviarse (solo fuera de producción).

@@ -326,3 +326,55 @@ describe('0003: login por nombre de usuario', () => {
   })
 })
 
+
+describe('0004: recuperación de contraseña', () => {
+  beforeAll(async () => {
+    await db.exec(`create role service_role nologin bypassrls;
+      create table auth.sessions (id uuid default gen_random_uuid(), user_id uuid);
+      grant usage on schema public, auth to service_role;
+      grant all on all tables in schema public to service_role;`)
+    await db.exec(sql('0004_recuperacion.sql'))
+    await db.exec(`grant all on public.recovery_codes, public.recovery_requests to service_role;`)
+  })
+  it('los clientes no pueden leer ni escribir los códigos', async () => {
+    for (const who of [A, 'anon']) {
+      const run = async () => {
+        expect(await fails(`select * from recovery_codes`)).toMatch(/permission denied/)
+        expect(await fails(`insert into recovery_codes (profile_id, code_hash, expires_at) values ('${A}','x', now())`)).toMatch(/permission denied/)
+        expect(await fails(`select * from recovery_requests`)).toMatch(/permission denied/)
+      }
+      if (who === 'anon') {
+        await db.exec(`set role anon`)
+        await run()
+        await db.exec(`reset role`)
+      } else await as(who, run)
+    }
+  })
+  it('bump_recovery_attempts cuenta de forma atómica y devuelve 0 sin código', async () => {
+    expect((await q(`select bump_recovery_attempts('${A}') n`)).rows[0].n).toBe(0)
+    await q(`insert into recovery_codes (profile_id, code_hash, expires_at) values ('${A}','h', now() + interval '15 min')`)
+    expect((await q(`select bump_recovery_attempts('${A}') n`)).rows[0].n).toBe(1)
+    expect((await q(`select bump_recovery_attempts('${A}') n`)).rows[0].n).toBe(2)
+  })
+  it('un solo código por perfil (el nuevo sustituye al anterior)', async () => {
+    await q(`insert into recovery_codes (profile_id, code_hash, expires_at) values ('${A}','h2', now()) on conflict (profile_id) do update set code_hash = excluded.code_hash, attempts = 0`)
+    const r = await q(`select code_hash, attempts from recovery_codes where profile_id='${A}'`)
+    expect(r.rows).toEqual([{ code_hash: 'h2', attempts: 0 }])
+  })
+  it('revoke_user_sessions cierra las sesiones y solo la puede llamar el servidor', async () => {
+    await q(`insert into auth.sessions (user_id) values ('${A}'), ('${A}'), ('${B}')`)
+    await as(A, async () => expect(await fails(`select revoke_user_sessions('${A}')`)).toMatch(/permission denied/))
+    await db.exec(`set role service_role`)
+    await q(`select revoke_user_sessions('${A}')`)
+    await db.exec(`reset role`)
+    expect((await q(`select count(*)::int n from auth.sessions where user_id='${A}'`)).rows[0].n).toBe(0)
+    expect((await q(`select count(*)::int n from auth.sessions where user_id='${B}'`)).rows[0].n).toBe(1)
+  })
+  it('purge_recovery_data borra lo caducado', async () => {
+    await q(`update recovery_codes set expires_at = now() - interval '1 min'`)
+    await db.exec(`set role service_role`)
+    await q(`select purge_recovery_data()`)
+    await db.exec(`reset role`)
+    expect((await q(`select count(*)::int n from recovery_codes`)).rows[0].n).toBe(0)
+  })
+})
