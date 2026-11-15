@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useMyGroups } from '../../hooks/useGroups'
 import { useGroupView } from '../../hooks/useGroupView'
 import { ACTIVE_GROUP_KEY } from '../../context/AuthContext'
-import { addWeeks, defaultWeek } from '../../lib/weeks'
+import { addWeeks, defaultWeek, formatWeekLabelShort } from '../../lib/weeks'
 import BestTimes from './BestTimes'
 import { Chip } from '../../ui/misc'
 
@@ -38,8 +38,8 @@ function Inner({ code, groups, onPick, week, offset, setOffset, onCreatePlan }: 
         </div>
       )}
       <div className="flex gap-2" role="group" aria-label="Semana">
-        <Chip active={offset === 0} onClick={() => setOffset(0)}>Esta semana</Chip>
-        <Chip active={offset === 1} onClick={() => setOffset(1)}>La próxima</Chip>
+        <Chip active={offset === 0} onClick={() => setOffset(0)}>{formatWeekLabelShort(defaultWeek())}</Chip>
+        <Chip active={offset === 1} onClick={() => setOffset(1)}>{formatWeekLabelShort(addWeeks(defaultWeek(), 1))}</Chip>
       </div>
     </div>
   )
