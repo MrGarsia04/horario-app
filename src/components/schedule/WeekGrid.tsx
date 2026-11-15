@@ -3,7 +3,7 @@ import { toLabel } from '../../lib/schedule/availability'
 import { canScroll, columnWidth, firstVisibleDay, scrollLeftForDay } from '../../lib/schedule/dayPager'
 import type { Block, DayKey } from '../../lib/schedule/types'
 import { IconLeft, IconRight, IconRepeat } from '../../ui/icons'
-import { DAYS, SNAP, snap } from './constants'
+import { DAYS } from './constants'
 
 const PX_PER_MIN = 0.8 // 48 px por hora
 const DEFAULT_FROM = 7 * 60
@@ -30,16 +30,15 @@ interface Props {
   freeDays?: Set<string>
   /** día en el que abrir (índice 0-6) */
   initialDay?: number
-  onCreate: (day: DayKey, start: number, end: number) => void
   onEdit: (b: Block) => void
 }
 
-export default function WeekGrid({ blocksByDay, layerColor, dates = null, today, freeDays, initialDay = 0, onCreate, onEdit }: Props) {
+export default function WeekGrid({ blocksByDay, layerColor, dates = null, today, freeDays, initialDay = 0, onEdit }: Props) {
   const dayCount = useDayCount()
   const scroller = useRef<HTMLDivElement>(null)
   const [first, setFirst] = useState(Math.min(initialDay, 7 - dayCount))
 
-  // Todas las columnas existen siempre; en móvil se ven 3 y el resto se alcanza DESLIZANDO el dedo (scroll horizontal con «snap»)
+  // Todas las columnas existen siempre; en móvil se ven 3 y el resto se alcanza DESLIZANDO el dedo, con scroll libre (sin saltos por día: se puede ir de una punta a otra de golpe)
   const shown = DAYS.flatMap((d) => blocksByDay[d.key] ?? [])
   const { from, to } = useMemo(() => ({
     from: Math.min(DEFAULT_FROM, Math.floor(Math.min(...shown.map((b) => b.start_min), DEFAULT_FROM) / 60) * 60),
@@ -49,10 +48,21 @@ export default function WeekGrid({ blocksByDay, layerColor, dates = null, today,
   const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
   const colW = () => columnWidth(scroller.current?.clientWidth ?? 0, dayCount)
+  const raf = useRef(0)
   const syncFirst = useCallback(() => {
     const el = scroller.current
     if (el) setFirst(firstVisibleDay(el.scrollLeft, columnWidth(el.clientWidth, dayCount), dayCount))
   }, [dayCount])
+
+  // El aviso de qué días se ven se actualiza mientras se desplaza (como mucho una vez por fotograma)
+  const onScroll = useCallback(() => {
+    if (raf.current) return
+    raf.current = requestAnimationFrame(() => {
+      raf.current = 0
+      syncFirst()
+    })
+  }, [syncFirst])
+  useEffect(() => () => cancelAnimationFrame(raf.current), [])
 
   // Abrir en el día pedido (hoy, o el lunes) y recolocar si cambia el número de días visibles (girar el móvil, redimensionar)
   useLayoutEffect(() => {
@@ -62,9 +72,10 @@ export default function WeekGrid({ blocksByDay, layerColor, dates = null, today,
     syncFirst()
   }, [initialDay, dayCount, syncFirst])
 
+  // Las flechas mueven una «página» de días (3 en móvil) con scroll suave; el scroll libre con el dedo sigue sin encajar por día
   const move = (delta: number) => {
     const el = scroller.current
-    if (el) el.scrollTo({ left: scrollLeftForDay(first + delta, colW(), dayCount), behavior: reduced ? 'auto' : 'smooth' })
+    if (el) el.scrollTo({ left: scrollLeftForDay(first + delta * dayCount, colW(), dayCount), behavior: reduced ? 'auto' : 'smooth' })
   }
   const can = canScroll(first, dayCount)
   const last = Math.min(6, first + dayCount - 1)
@@ -83,8 +94,8 @@ export default function WeekGrid({ blocksByDay, layerColor, dates = null, today,
           </div>
           <div
             ref={scroller}
-            onScroll={syncFirst}
-            className="min-w-0 flex-1 snap-x snap-mandatory overflow-x-auto overscroll-x-contain"
+            onScroll={onScroll}
+            className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain"
             style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
             aria-label="Días de la semana: desliza para ver más"
           >
@@ -102,7 +113,6 @@ export default function WeekGrid({ blocksByDay, layerColor, dates = null, today,
                   to={to}
                   height={height}
                   hasFree={freeDays?.has(d.key) ?? false}
-                  onCreate={(s, e) => onCreate(d.key, s, e)}
                   onEdit={onEdit}
                 />
               ))}
@@ -134,66 +144,12 @@ interface ColProps {
   to: number
   height: number
   hasFree: boolean
-  onCreate: (start: number, end: number) => void
   onEdit: (b: Block) => void
 }
 
-function DayColumn({ dayKey, label, date, isToday, blocks, layerColor, from, to, height, hasFree, onCreate, onEdit }: ColProps) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [drag, setDrag] = useState<{ a: number; b: number } | null>(null)
-  const dragRef = useRef<{ a: number; b: number } | null>(null)
-  const touchRef = useRef<{ x: number; y: number; t: number; min: number } | null>(null)
-  const setDragBoth = (d: { a: number; b: number } | null) => {
-    dragRef.current = d
-    setDrag(d)
-  }
-
-  const minuteAt = (clientY: number) => {
-    const rect = ref.current!.getBoundingClientRect()
-    return Math.max(from, Math.min(to, snap(from + (clientY - rect.top) / PX_PER_MIN)))
-  }
-  const quick = (min: number) => {
-    const s = Math.min(Math.floor(min / 60) * 60, to - 60)
-    onCreate(Math.max(from, s), Math.max(from, s) + 60) // un toque = bloque de 1 h en esa hora
-  }
-
-  // Ratón: arrastrar para crear. Táctil: un toque crea un bloque rápido y el desplazamiento vertical NO se bloquea.
-  function down(e: React.PointerEvent) {
-    if (e.pointerType === 'touch') {
-      touchRef.current = { x: e.clientX, y: e.clientY, t: Date.now(), min: minuteAt(e.clientY) }
-      return
-    }
-    if (e.button !== 0) return
-    e.currentTarget.setPointerCapture?.(e.pointerId)
-    const m = minuteAt(e.clientY)
-    setDragBoth({ a: m, b: m })
-  }
-  function move(e: React.PointerEvent) {
-    const d = dragRef.current
-    if (d) setDragBoth({ a: d.a, b: minuteAt(e.clientY) })
-  }
-  function up(e: React.PointerEvent) {
-    if (e.pointerType === 'touch') {
-      const t = touchRef.current
-      touchRef.current = null
-      if (t && Math.hypot(e.clientX - t.x, e.clientY - t.y) < 8 && Date.now() - t.t < 500) quick(t.min)
-      return
-    }
-    const d = dragRef.current
-    if (!d) return
-    let s = Math.min(d.a, d.b)
-    let en = Math.max(d.a, d.b)
-    setDragBoth(null)
-    if (en - s < SNAP) return quick(s)
-    if (en > to) {
-      en = to
-      s = Math.min(s, en - SNAP)
-    }
-    onCreate(s, en)
-  }
-
+function DayColumn({ dayKey, label, date, isToday, blocks, layerColor, from, to, height, hasFree, onEdit }: ColProps) {
   return (
-    <div className="min-w-0 flex-1 snap-start border-l border-board-line first:border-l-0">
+    <div className="min-w-0 flex-1 border-l border-board-line first:border-l-0">
       <div className={`flex h-11 items-center justify-center border-b border-board-line px-0.5 ${isToday ? 'bg-board-amber/15' : ''}`}>
         <div className="text-center leading-tight">
           <div className={`text-xs font-semibold ${isToday ? 'text-board-amber' : ''}`}>{label}</div>
@@ -201,20 +157,13 @@ function DayColumn({ dayKey, label, date, isToday, blocks, layerColor, from, to,
         </div>
       </div>
       <div
-        ref={ref}
-        onPointerDown={down}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={() => { setDragBoth(null); touchRef.current = null }}
         style={{ height, backgroundImage: 'linear-gradient(rgb(var(--board-line) / 0.6) 1px, transparent 1px)', backgroundSize: `100% ${60 * PX_PER_MIN}px` }}
-        className="relative cursor-crosshair"
+        className="relative"
         data-testid={`col-${dayKey}`}
       >
         {blocks.map((b) => (
           <button
             key={b.id}
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
             onClick={() => onEdit(b)}
             style={{ top: (b.start_min - from) * PX_PER_MIN, height: Math.max((b.end_min - b.start_min) * PX_PER_MIN - 1, 16), backgroundColor: b.color ?? layerColor(b.template_id) }}
             className="absolute inset-x-0.5 overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight text-white shadow-sm hover:brightness-110"
@@ -228,9 +177,6 @@ function DayColumn({ dayKey, label, date, isToday, blocks, layerColor, from, to,
             {b.location && <span className="block truncate opacity-85">{b.location}</span>}
           </button>
         ))}
-        {drag && (
-          <div className="pointer-events-none absolute inset-x-0 border border-board-amber bg-board-amber/40" style={{ top: (Math.min(drag.a, drag.b) - from) * PX_PER_MIN, height: Math.max(Math.abs(drag.b - drag.a) * PX_PER_MIN, 8) }} />
-        )}
       </div>
     </div>
   )

@@ -150,10 +150,10 @@ export default function LayerEditor({ userId, groupCode, layerId, layers, blocks
           {step === 2 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm text-board-cream/70">Añade todos los bloques de «{layer?.name}»: toca un hueco o usa el botón.</p>
+                <p className="text-sm text-board-cream/70">Añade todos los bloques de «{layer?.name}» con el botón «Bloque». Toca uno de la semana para editarlo.</p>
                 <Button icon={<IconPlus className="h-4 w-4" />} onClick={() => setDraft({ day: 'mon', start_min: 9 * 60, end_min: 10 * 60 })}>Bloque</Button>
               </div>
-              <WeekGrid blocksByDay={blocksByDay} layerColor={() => layer?.color ?? color} onCreate={(day, s, e) => setDraft({ day, start_min: s, end_min: e })} onEdit={(b) => setDraft({ ...b })} />
+              <WeekGrid blocksByDay={blocksByDay} layerColor={() => layer?.color ?? color} onEdit={(b) => setDraft({ ...b })} />
               <section>
                 <h3 className="mb-2 text-sm font-semibold">Bloques de la capa ({layerBlocks.length})</h3>
                 {layerBlocks.length === 0 ? (
