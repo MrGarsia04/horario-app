@@ -39,6 +39,8 @@
   --board-teal: 35 122 102; /* #237A66 menta oscuro: acento secundario */
   --board-onaccent: 255 255 255;
   --board-danger: 200 40 30; /* #C8281E rojo tomate (distinto del rosa) */
+  --board-free: 46 132 80; /* #2E8450 verde: «libre» / coincidencia */
+  --board-sky: 52 100 178; /* #3464B2 azul: acciones secundarias e información */
 
   --mint-fill: 166 227 203; /* #A6E3CB menta pastel: casillas ocupadas */
 

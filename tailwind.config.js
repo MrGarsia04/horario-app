@@ -7,7 +7,7 @@
 const token = (name) => `rgb(var(--board-${name}) / <alpha-value>)`
 
 export default {
-  content: ['./index.html', './src/**/*.{js,jsx}'],
+  content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
       colors: {
@@ -17,7 +17,9 @@ export default {
           line: token('line'), // bordes y separadores
           cream: token('cream'), // color del texto
           amber: token('amber'), // acento principal (botones, enlaces, foco)
-          teal: token('teal'), // acento secundario (ocupado, "éxito")
+          teal: token('teal'), // ocupado / "éxito"
+          free: token('free'), // «libre» / coincidencia (verde)
+          sky: token('sky'), // acento secundario: acciones secundarias e información
           onaccent: token('onaccent'), // texto sobre un fondo de acento
           danger: token('danger'), // errores
         },
