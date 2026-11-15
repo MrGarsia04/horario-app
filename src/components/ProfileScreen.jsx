@@ -5,6 +5,7 @@ import { updateProfileInfo, fetchPublicProfile } from '../lib/profile'
 import FriendsPanel from './FriendsPanel'
 import PublicProfile from './PublicProfile'
 import ContactEmailCard from './ContactEmailCard'
+import PasswordInput from '../ui/PasswordInput'
 
 export default function ProfileScreen({ userId, username, onUsernameChanged, onBack = undefined }) {
   const queryClient = useQueryClient()
@@ -219,22 +220,22 @@ export default function ProfileScreen({ userId, username, onUsernameChanged, onB
             </button>
             {showPasswordForm && (
               <form onSubmit={handleChangePassword} className="px-6 pb-6 space-y-3">
-                <input
-                  type="password"
+                <PasswordInput
+                  autoComplete="current-password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   placeholder="Contraseña actual"
                   className="w-full bg-board-bg border border-board-line rounded px-3 py-2 text-sm outline-none focus:border-board-amber"
                 />
-                <input
-                  type="password"
+                <PasswordInput
+                  autoComplete="new-password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Contraseña nueva"
                   className="w-full bg-board-bg border border-board-line rounded px-3 py-2 text-sm outline-none focus:border-board-amber"
                 />
-                <input
-                  type="password"
+                <PasswordInput
+                  autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Repite la contraseña nueva"
