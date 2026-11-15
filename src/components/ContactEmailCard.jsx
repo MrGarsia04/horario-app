@@ -25,7 +25,7 @@ export default function ContactEmailCard({ onDone, onSkip, title = 'Añade tu co
     <form onSubmit={handleSubmit} className="bg-board-panel border border-board-line rounded-md p-6">
       <p className="text-sm text-board-cream/70 mb-1">{title}</p>
       <p className="text-xs text-board-cream/40 mb-3">
-        Opcional. Solo lo ves tú; servirá para recuperar tu cuenta en el futuro.
+        Opcional. Solo lo ve quien administra la app y sirve para verificar tu identidad si olvidas tu contraseña.
       </p>
       <input
         type="email"
